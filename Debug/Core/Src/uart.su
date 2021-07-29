@@ -1,0 +1,4 @@
+uart.c:39:6:HAL_UART_RxCpltCallback	16	static
+uart.c:50:6:HAL_UART_TxCpltCallback	16	static
+uart.c:62:6:UartInit	8	static
+uart.c:95:10:SizeOfArray	24	static

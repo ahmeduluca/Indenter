@@ -1,0 +1,12 @@
+experiment.c:149:6:ftos	232	static
+experiment.c:314:6:ParaInt	24	static
+experiment.c:405:6:Cal	24	static
+experiment.c:432:6:slopExt	96	static
+experiment.c:574:6:Indent	32	static
+experiment.c:641:6:Hold	16	static
+experiment.c:651:6:autoApproach	16	static
+experiment.c:712:6:Osc	24	static
+experiment.c:737:6:moveXY	32	static
+experiment.c:877:6:StepD	16	static
+experiment.c:932:6:GiveVolt	24	static
+experiment.c:938:6:Emergency	16	static

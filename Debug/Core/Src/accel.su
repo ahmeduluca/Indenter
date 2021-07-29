@@ -1,0 +1,2 @@
+accel.c:17:6:readMPU	56	static
+accel.c:59:6:readMMA845	48	static

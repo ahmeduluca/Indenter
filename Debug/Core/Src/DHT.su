@@ -1,0 +1,7 @@
+DHT.c:17:6:DHT_Start	8	static
+DHT.c:26:6:DHT_GetData	16	static
+DHT.c:54:9:DHT_Read	16	static
+DHT.c:77:9:Check_Response	16	static
+DHT.c:97:6:set_gpio_mode	40	static
+DHT.c:119:6:DWT_Delay	24	static
+DHT.c:128:6:DWT_Init	4	static

@@ -1,0 +1,2 @@
+tmc_uart.c:26:6:TmcRx	4	static
+tmc_uart.c:30:6:TmcTx	4	static

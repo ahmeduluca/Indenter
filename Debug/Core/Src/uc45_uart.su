@@ -1,0 +1,4 @@
+uc45_uart.c:51:6:Uc45Rx	8	static
+uc45_uart.c:118:6:Uc45Tx	8	static
+uc45_uart.c:129:6:DummyRead1	16	static
+uc45_uart.c:134:6:SendAct	24	static
