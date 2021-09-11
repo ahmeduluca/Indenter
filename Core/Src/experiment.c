@@ -140,6 +140,9 @@ int delta=1000000;//1 full actuator scan range 5um
 int increment=200;//100ms incs for approximately 20nm/s
 int appOrret=0;
 int loadIndent=0;
+int dxy=0;
+extern int initialMotor;
+extern int approaching;
 //heater params
 int sampleChannel=0;
 extern int heatDuty[3];
@@ -644,17 +647,21 @@ void Hold(long hold){
 		TimeSet(&htim10, 50000);
 	}
 	else{
+		holder=0;
 		TimeSet(&htim10, 50000);
 	}
 	holdcount++;
 }
-void autoApproach(int dir){
+void autoApproach(int typ){
 	first=voltnow;
-	if(loadnow>thresholdApp && dir!=-1){
+	if(loadnow>thresholdApp && typ==2){
 		retracting=1;
 	}
-	if(retracting==1){
+	if(retracting==1 && typ!=3 && typ != -1 ){
 		TimeSet(&htim13, 200000);
+		if(app==0){
+			increment= expin[expcount].speed * 0.2;
+		}
 		if(expin[expcount].stepret!=0){
 			if(expLoad){
 				holdPos=expin[expcount].removePer*expin[expcount].depth/100;
@@ -667,14 +674,16 @@ void autoApproach(int dir){
 			}
 			holdRetDur=expin[expcount].removeHold/200;
 			holdRet=0;
+			dxy=2;
 		}
 		else{
+			dxy=1;
 			holdRet=2;
 		}
 		appOrret=0;
 		isAutoApproach=3;
 	}
-	else if(retracting!=1&&dir!=3){
+	else if(typ!=3){//directly enter after any retract step; after xy move function used with typ=3 state
 		if(expin[expcount].xpst!=0){
 			if(expin[expcount].xpst>6){
 				isAutoApproach=2;
@@ -695,17 +704,51 @@ void autoApproach(int dir){
 				moveXY(1, 1, 1, abs(expin[expcount].ypst));
 			}
 		}
-		if(expin[expcount].xpst==0 && expin[expcount].ypst==0){
-			isAutoApproach=1;
+		if(expin[expcount].xpst==0 && expin[expcount].ypst==0 && expcount!=0){// after retract; without any xy movement
+			if(app!=0||retracting==2){
+				SendPc("Retract_Complete\0", 5, 4);
+				uart2say=1;
+				TimeSet(&htim12, 100000);
+		    	appOrret=1;
+			}
+			else{
+				isAutoApproach=0;
+				SendPc("Retract_Complete\0", 5, 4);
+				uart2say=1;
+				TimeSet(&htim12, 100000);;
+			}
+		}
+		else if(expcount==0 && app!=0){//just for first step flow does not wait for REFIN message!
+			TimeSet(&htim13, 200000);
+			appOrret=1;
+			isAutoApproach=3;
 		}
 	}
-	else if(app!=0||retracting==2){
+	else if(app!=0){// after retract + xy movement send completion of retract message
+		// and wait for REFIN message to start approach
 		TimeSet(&htim13, 200000);
 		appOrret=1;
-		isAutoApproach=3;
+		if(expcount!=0){
+			SendPc("Retract_Complete\0", 5, 4);
+			uart2say=1;
+			TimeSet(&htim12, 100000);
+		}
 	}
-	else{
-		isAutoApproach=0;
+	else{// after retract + xy movement send retract completed and wait for REFIN message
+		// its for lack of approach routine usage!
+		if(expcount!=0){
+			SendPc("Retract_Complete\0", 5, 4);
+			uart2say=1;
+			TimeSet(&htim12, 100000);
+		}
+		else{
+			isAutoApproach=0;
+			HAL_TIM_Base_Start_IT(&htim10);
+			sendexp=1;
+			initialPos=voltnow;
+			initialMotor=motpos;
+			approaching=0;
+		}
 	}
 	//app || retracting || int dir ||---sendexp--eqstep--osc--automot-:-
 }
@@ -734,12 +777,12 @@ void Osc(long amp, long period, long dur, int type){
 
 //Movement Control Functions:
 
-void moveXY(int dir, int delta, int speed, int stepsize){
+void moveXY(int direk, int delta, int speed, int stepsize){
 	//HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin) ;
 	int time=1;
 	switch(speed){
 	case 1:
-		if(dir){
+		if(direk){
 			time=200;
 		}
 		else{
@@ -747,7 +790,7 @@ void moveXY(int dir, int delta, int speed, int stepsize){
 		}
 		break;
 	case 2:
-		if(dir){
+		if(direk){
 			time=500;
 		}
 		else{
@@ -755,7 +798,7 @@ void moveXY(int dir, int delta, int speed, int stepsize){
 		}
 		break;
 	case 3:
-		if(dir){
+		if(direk){
 			time=1000;
 		}
 		else{
@@ -763,7 +806,7 @@ void moveXY(int dir, int delta, int speed, int stepsize){
 		}
 		break;
 	case 4:
-		if(dir){
+		if(direk){
 			time=5000;
 		}
 		else{
@@ -771,7 +814,7 @@ void moveXY(int dir, int delta, int speed, int stepsize){
 		}
 		break;
 	case 5:
-		if(dir){
+		if(direk){
 			time=10000;
 		}
 		else{
@@ -784,7 +827,7 @@ void moveXY(int dir, int delta, int speed, int stepsize){
 	}
 	switch(stepsize){
 	case 1:
-		if(dir){
+		if(direk){
 			xsteps=2;
 		}
 		else{
@@ -792,7 +835,7 @@ void moveXY(int dir, int delta, int speed, int stepsize){
 		}
 		break;
 	case 2:
-		if(dir){
+		if(direk){
 			xsteps=10;
 		}
 		else{
@@ -800,7 +843,7 @@ void moveXY(int dir, int delta, int speed, int stepsize){
 		}
 		break;
 	case 3:
-		if(dir){
+		if(direk){
 			xsteps=20;
 		}
 		else{
@@ -808,7 +851,7 @@ void moveXY(int dir, int delta, int speed, int stepsize){
 		}
 		break;
 	case 4:
-		if(dir){
+		if(direk){
 			xsteps=50;
 		}
 		else{
@@ -816,7 +859,7 @@ void moveXY(int dir, int delta, int speed, int stepsize){
 		}
 		break;
 	case 5:
-		if(dir){
+		if(direk){
 			xsteps=100;
 		}
 		else{
@@ -824,7 +867,7 @@ void moveXY(int dir, int delta, int speed, int stepsize){
 		}
 		break;
 	default:
-		if(dir){
+		if(direk){
 			xsteps=stepsize;
 			encodMove=encodMove+1;
 		}
@@ -834,7 +877,7 @@ void moveXY(int dir, int delta, int speed, int stepsize){
 		}
 		break;
 	}
-	if(dir==1){//Xdir
+	if(direk==1){//Xdir
 		TIM8->CNT=32767;
 		if(delta==0){//+X
 			joyint2 = joyint2+12;

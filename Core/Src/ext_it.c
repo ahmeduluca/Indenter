@@ -17,6 +17,8 @@ extern int xsteps;
 extern int ysteps;
 extern int ymov;
 extern int xmov;
+extern char motsender [100];
+extern char BUFSS [2];
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
@@ -57,10 +59,8 @@ void TmcIndex(void){
 void JoyBut1(void){
 	if(pccom!=1){
 		if(joyen==1){
-			if(speedmode==3){
-				speedmode=2;
-			}
-			else{
+			speedmode=speedmode+1;
+			if(speedmode>5){
 				speedmode=2;
 			}
 		}
@@ -71,7 +71,16 @@ void JoyBut1(void){
 	}
 	else{
 		if(joyen==1){
-
+			speedmode=speedmode+1;
+			if(speedmode>5){
+				speedmode=2;
+			}
+			motsender[0]=0;
+			BUFSS[0]=0;
+			itoa(speedmode,BUFSS,10);
+			strcat(motsender,"MSP\0");
+			strcat(motsender,BUFSS);
+			SendPc(motsender, 5, 0);
 		}
 	}
 }

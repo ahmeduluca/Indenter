@@ -1,6 +1,6 @@
-pc_uart.c:143:6:PcRx	24	static
-pc_uart.c:320:6:PcTx	8	static
-pc_uart.c:330:6:DummyRead2	16	static
-pc_uart.c:335:6:SendPc	88	static
-pc_uart.c:367:6:ProcessRx	24	static
-pc_uart.c:445:6:ProcessData	152	static
+pc_uart.c:147:6:PcRx	24	static
+pc_uart.c:356:6:PcTx	8	static
+pc_uart.c:366:6:DummyRead2	16	static
+pc_uart.c:371:6:SendPc	88	static
+pc_uart.c:403:6:ProcessRx	24	static
+pc_uart.c:481:6:ProcessData	152	static

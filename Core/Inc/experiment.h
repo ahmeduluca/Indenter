@@ -122,8 +122,8 @@ void Hold(long hold);
 void ftos(long a, char*s);
 void ParaInt(uint8_t * param);
 void StepD(int yon);
-void moveXY(int dir, int delta, int speed, int stepsize);
-void autoApproach(int dir);
+void moveXY(int direk, int delta, int speed, int stepsize);
+void autoApproach(int typ);
 void slopExt(int type, int xinter, int yinter, int threshold, int pull, int zinc);
 void Emergency(int type);
 

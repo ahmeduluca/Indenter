@@ -106,11 +106,13 @@ extern int xmov;
 extern int ymov;
 extern int increment;
 extern int loadIndent;
+extern int holdcount;
 
 uint32_t temptemp=0;
 int heatFeed[3]={0,0,0};
 int heatDuty[3]={0,0,0};
 int heaterid;
+char BUFDEL[2];
 char BUFGEN[2];
 char BUFSM[2];
 char BUFSS[2];
@@ -122,6 +124,8 @@ int onlyAct=0;
 
 //extern UARTCOM pcInit;
 //extern UARTCOM uc45Sender;
+int stepfin=0;
+int readPc=0;
 int sendingPc=0;
 char ucBuffer[15];
 char ucPreBuf[15];
@@ -142,11 +146,15 @@ UARTCOM pcInit={
 
 void PcRx(void){
 	_uartcom3->RxCounter++;
+	TimeSet(&htim12, 100000);
+	Rx_Timer3=0;
+	readPc=1;
 	if(contsend==1){
 		contsend=2;
 	}
 	if(_uartcom3->RxSize > _uartcom3->RxCounter)
 	{
+		_uartcom3->UResult^=Rx_Cplt;
 		HAL_UART_Receive_IT(&huart3, &_uartcom3->RxBuf[_uartcom3->RxCounter], 1);
 		if(_uartcom3->RxBuf[_uartcom3->RxCounter]=='Q'&&_uartcom3->RxSize!=5){//Emergency control **sıfırlama
 			emergency=1;
@@ -161,6 +169,7 @@ void PcRx(void){
 	}
 	else
 	{
+		readPc=0;
 		_uartcom3->UResult|=Rx_Cplt;
 		Rx_Timer3 = 0;
 		_uartcom3->RxCounter = 0;
@@ -216,7 +225,31 @@ void PcRx(void){
 			}
 			else if(_uartcom3->RxBuf[0]=='R'&&_uartcom3->RxBuf[1]=='E'){
 				sendexp=1;
+				if(isAutoApproach==5){//last retract finish
+					isAutoApproach=0;
+				}
+				else{ // retract finish
+					if(app){ //continue with approach routine
+						isAutoApproach=3;
+					}
+					else{//no approach => continue to next step
+						isAutoApproach=0;
+					}
+				}
+				holdcount=0;
 				HAL_TIM_Base_Start_IT(&htim10);
+			}
+			else if(_uartcom3->RxBuf[0]=='A'&&_uartcom3->RxBuf[1]=='P'){
+				sendexp=1;
+				if(isAutoApproach==5){//approach finish
+					isAutoApproach=0;
+				}
+			}
+			else if(_uartcom3->RxBuf[0]=='O'&&_uartcom3->RxBuf[1]=='S'){ // step transition to retract /& next step
+				stepfin=1;
+			}
+			else if(_uartcom3->RxBuf[0]=='I'&&_uartcom3->RxBuf[1]=='N'){
+				stepfin=1;
 			}
 			else{
 				HAL_TIM_Base_Start_IT(&htim10);
@@ -232,15 +265,15 @@ void PcRx(void){
 		}
 		else if(_uartcom3->RxBuf[0]=='V'){
 			BUFGEN[0]=0;
-			reader[0]=0;
+			BUFDEL[0] = 0;
 			BUFSM[0]=0;
 			BUFSS[0]=0;
 			memcpy(&BUFGEN,&_uartcom3->RxBuf[1],1);
-			memcpy(&reader,&_uartcom3->RxBuf[2],1);
+			memcpy(&BUFDEL,&_uartcom3->RxBuf[2],1);
 			memcpy(&BUFSM,&_uartcom3->RxBuf[3],1);
 			memcpy(&BUFSS,&_uartcom3->RxBuf[4],1);
 			isHXcom=1;
-			moveXY(atoi(BUFGEN), atoi(reader), atoi(BUFSM),atoi(BUFSS));
+			moveXY(atoi(BUFGEN), atoi(BUFDEL), atoi(BUFSM),atoi(BUFSS));
 		}
 		else if(_uartcom3->RxBuf[0]=='J'){
 			if(_uartcom3->RxBuf[2]=='E'){
@@ -305,6 +338,9 @@ void PcRx(void){
 			SendPc("Contact Point Saved", 5, OLD_ID);
 		}
 		else{
+			if(contsend==2){
+				contsend=3;
+			}
 			reader[0]=0;
 			emergency=0;
 			memcpy(&reader,&_uartcom3->RxBuf[0],_uartcom3->RxSize+1);
@@ -444,6 +480,12 @@ void ProcessRx(int type){
 
 void ProcessData(char incom[],int iD)
 {
+	if(incom[0]!='I' && contsend==3){
+		contsend=1;
+	}
+	else{
+		contsend=0;
+	}
 	switch(iD)
 	{
 	case ID_UART_START:
@@ -632,7 +674,7 @@ void ProcessData(char incom[],int iD)
 				else if(incom[2]=='1'){
 					SendPc("TAMAMDIR", 5, OLD_ID);
 					isHXcom=0;
-					contsend=1;
+					contsend=1; // continuum send live load data!
 				}
 				else if(incom[2]=='2'){
 					instant=HX711_Tare(instant, 10);
@@ -781,28 +823,18 @@ void ProcessData(char incom[],int iD)
 				speedApp=atoi(appBuf);
 				appBuf[0]=0;
 				if(motorapp==0){
-					increment=speedApp;
+					if(app!=0){
+						increment=speedApp;
+					}
 					speedApp=50000;
 				}
 				if(app==none){
 					SendPc("Executing_Indentation\0", 5, EXP_START);
-					if(expin[0].xpst!=0||expin[0].ypst!=0){
-						autoApproach(-1);//set x&y positions for first step;
-					}
 					uart2say=1;
 					TimeSet(&htim12, 100000);
 				}
 				else{
 					SendPc("APPROACH\0", 5, EXP_START);
-					if(motorapp==1){
-						automot=1;
-					}
-					if(app==internal){
-						autoApproach(0);
-					}
-					else if(app==external){
-						autoApproach(1);
-					}
 					uart2say=1;
 					TimeSet(&htim12, 100000);
 				}
@@ -875,6 +907,14 @@ void ProcessData(char incom[],int iD)
 			uart2say=0;
 			automot=0;
 			stopmot=0;
+			if(app==none){
+				if(expin[0].xpst!=0||expin[0].ypst!=0){
+					isAutoApproach=1;//set x&y positions for first step;
+				}
+			}
+			else{
+				isAutoApproach=1;
+			}
 			TimeSet(&htim10, 100000);
 		}
 		else{

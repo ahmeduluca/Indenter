@@ -266,8 +266,8 @@ int main(void)
   while (1)
   {
 	  if(isAutoApproach==1){
-		  isAutoApproach=4;
-		  autoApproach(3);
+		  isAutoApproach=6;
+		  autoApproach(-1);
 	  }
     /* USER CODE END WHILE */
 
