@@ -370,10 +370,15 @@ void Timer9(void){
 					isAutoApproach=3;
 				}
 				else{
-					retracting=0;
-					thresholdApp = contact + loadnow;
-					dxy=0;
-					isAutoApproach=1;
+					if(dxy!=4){
+						retracting=0;
+						thresholdApp = contact + loadnow;
+						dxy=0;
+						isAutoApproach=1;
+					}
+					else{
+						dxy=3;
+					}
 				}
 				sayacmot=0;
 			}
@@ -686,6 +691,7 @@ void Timer10(void){
 					osccount++;
 				}
 				else{
+					TimeSet(&htim10, 50000);
 					ftos(firstpt,voltage);
 					strcat(datasender,voltage);
 					strcat(datasender,"E\0");
@@ -699,7 +705,7 @@ void Timer10(void){
 					sendexp=1;
 				}
 			}
-			else if(oscsqrCount%5==0){
+			else if(oscsqrCount%2000==0){
 				SendPc(motsender, 5, 0);
 			}
 			oscsqrCount++;
@@ -1303,7 +1309,7 @@ void Timer13(void){
 			if(appOrret){
 				if(((loadnow<thresholdApp&&app==1)||(pcDecision==1&&app==2)) && (voltnow >= -1000000 && motorcon==0) && emergency==0){
 					approaching=1;
-					if((onlyAct==0 && voltnow <= first-delta)||motorapp==1){
+					if((onlyAct==0 && voltnow <= first-delta&&!dxy)||motorapp==1){
 						if(motorapp==0){//!(10um) move -->& scan > ~10um
 							voltnow=voltnow+delta;
 							ftos(voltnow,voltage);
@@ -1316,15 +1322,8 @@ void Timer13(void){
 							strcat(motsender,datasender);
 							SendPc(motsender, 5, 4);
 							GiveVolt(voltage);
-							if(speedmode==3){
-								stepsay=2*2;
-							}
-							else if(speedmode==4){
-								stepsay=4*2;
-							}
-							else if(speedmode==5){
-								stepsay=8*2;
-							}
+							speedmode=5;//if tmc2209
+							stepsay=16;
 							automot=0;
 							TimeSet(&htim9, 10000);
 						}
@@ -1336,10 +1335,28 @@ void Timer13(void){
 						isAutoApproach=4;
 						StepD(0);
 					}
-					else if(((loadnow<thresholdApp&&app==1)||(pcDecision==1&&app==2)) && voltnow-increment < -1000000 ){
-						SendPc("OutRange", 5, 4);
-						HAL_TIM_Base_Stop_IT(&htim10);
-						isAutoApproach=0;
+					else if(((loadnow<thresholdApp&&app==1)||(pcDecision==1&&app==2)) && ((voltnow-increment < actTouchpt && dxy)||(voltnow-increment < -1000000 && !dxy)) ){
+						if(dxy==3){
+							voltnow=actTouchpt;
+							ftos(voltnow,voltage);
+							motsender[0]=0;
+							datasender[0]=0;
+							itoa(loadnow,motsender,10);
+							strcat(motsender,"LM\0");
+							strcat(datasender,voltage);
+							strcat(datasender,"E\0");
+							strcat(motsender,datasender);
+							SendPc(motsender, 5, 0);
+							GiveVolt(voltage);
+							dxy=0;
+							first=voltnow;
+						}
+						else{
+							SendPc("OutRange", 5, 4);
+							ProcessRx(3);
+							HAL_TIM_Base_Stop_IT(&htim10);
+							isAutoApproach=0;
+						}
 					}
 					else if(motorapp!=1 && durummot==0){
 						voltnow=voltnow-increment;
@@ -1388,7 +1405,7 @@ void Timer13(void){
 						StepD(1);
 					}
 					else{
-						if(voltnow < actTouchpt+3*increment && voltnow+increment<7500000){
+						if((voltnow < actTouchpt+3*increment||dxy) && voltnow+increment<7500000){
 							voltnow=voltnow+increment;
 							ftos(voltnow,voltage);
 							motsender[0]=0;
@@ -1404,17 +1421,27 @@ void Timer13(void){
 							GiveVolt(voltage);
 						}
 						else{
-							dxy=0;
-							retracting=0;
-							thresholdApp = contact + loadnow;
-							if(expcount<step){
-								isAutoApproach=1;
+							if(dxy==2){
+								speedmode=5;
+								stepsay=200;
+								automot=0;
+								TimeSet(&htim9, 200000);
+								StepD(1);
+								dxy=4;
 							}
-							else{//if its last step
-								isAutoApproach=5;
-								uart2say=1;
-								TimeSet(&htim12, 100000);
-								SendPc("Retract_Complete\0", 5, 4);
+							else if(dxy!=4){
+								dxy=3;
+								retracting=0;
+								thresholdApp = contact + loadnow;// there may be motor retract also for safe xy positioning-will be checked later-
+								if(expcount<step){
+									isAutoApproach=1;
+								}
+								else{//if its last step
+									isAutoApproach=5;
+									uart2say=1;
+									TimeSet(&htim12, 100000);
+									SendPc("Retract_Complete\0", 5, 4);
+								}
 							}
 						}
 					}

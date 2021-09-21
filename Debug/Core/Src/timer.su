@@ -1,7 +1,7 @@
 timer.c:173:6:HAL_TIM_PeriodElapsedCallback	16	static
 timer.c:201:6:Timer9	8	static
-timer.c:518:6:Timer10	16	static
-timer.c:961:6:Timer11	8	static
-timer.c:1012:6:Timer12	8	static
-timer.c:1074:6:Timer13	64	static
-timer.c:1678:6:TimeSet	16	static
+timer.c:523:6:Timer10	16	static
+timer.c:967:6:Timer11	8	static
+timer.c:1018:6:Timer12	8	static
+timer.c:1080:6:Timer13	64	static
+timer.c:1705:6:TimeSet	16	static

@@ -766,8 +766,10 @@ void Osc(long amp, long period, long dur, int type){
 			ftos(firstpt-amp*2,lovolt);
 			numosc=2*dur/period;
 		}
-		sqrmod=23*period/1000;//normalde 10* ancak haberleşme zaman farkı 50 ms için önleme yapıyoruz
-		TimeSet(&htim10, 20000);//
+		sqrmod = 10*(period-0.075*period);//for 500 us cycle of timer, change voltage for sqr wave at half period at each (period/2*0.5) th cycle
+		// there is a phase between giving voltage change order and application of voltage via UC45 about 50 ms.
+		// It should not change for any cycle bcs its communication time for UC45; care should be taken for not to give smaller period than 50 ms
+		TimeSet(&htim10, 50);//
 	}
 	else if(type==2){
 		numosc=dur/period;

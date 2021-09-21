@@ -5,8 +5,8 @@ experiment.c:435:6:slopExt	96	static
 experiment.c:577:6:Indent	32	static
 experiment.c:644:6:Hold	16	static
 experiment.c:655:6:autoApproach	24	static
-experiment.c:755:6:Osc	24	static
-experiment.c:780:6:moveXY	32	static
-experiment.c:920:6:StepD	16	static
-experiment.c:975:6:GiveVolt	24	static
-experiment.c:981:6:Emergency	16	static
+experiment.c:755:6:Osc	32	static
+experiment.c:782:6:moveXY	32	static
+experiment.c:922:6:StepD	16	static
+experiment.c:977:6:GiveVolt	24	static
+experiment.c:983:6:Emergency	16	static
