@@ -153,6 +153,7 @@ extern int initialPos;
 extern int holdPos;
 extern int pcDecision;
 extern long thresholdApp;
+extern long thresholdOff;
 extern int onlyAct;
 extern int speedApp;
 extern int readPc;
@@ -372,7 +373,7 @@ void Timer9(void){
 				else{
 					if(dxy!=4){
 						retracting=0;
-						thresholdApp = contact + loadnow;
+						thresholdApp = thresholdOff + loadnow;
 						dxy=0;
 						isAutoApproach=1;
 					}
@@ -1405,8 +1406,23 @@ void Timer13(void){
 						StepD(1);
 					}
 					else{
-						if((voltnow < actTouchpt+3*increment||dxy) && voltnow+increment<7500000){
+						if((voltnow < actTouchpt+3*increment) && voltnow+increment<7500000){
 							voltnow=voltnow+increment;
+							ftos(voltnow,voltage);
+							motsender[0]=0;
+							datasender[0]=0;
+							itoa(loadnow,motsender,10);
+							strcat(motsender,"LM\0");
+							strcat(datasender,voltage);
+							strcat(datasender,"E\0");
+							strcat(motsender,datasender);
+							if(sendingPc==0){
+								SendPc(motsender, 5, 0);
+							}
+							GiveVolt(voltage);
+						}
+						else if(dxy&&voltnow >= actTouchpt+3*increment&&voltnow!=7500000){
+							voltnow=7500000;
 							ftos(voltnow,voltage);
 							motsender[0]=0;
 							datasender[0]=0;
@@ -1432,7 +1448,7 @@ void Timer13(void){
 							else if(dxy!=4){
 								dxy=3;
 								retracting=0;
-								thresholdApp = contact + loadnow;// there may be motor retract also for safe xy positioning-will be checked later-
+								thresholdApp = thresholdOff + loadnow;// there may be motor retract also for safe xy positioning-will be checked later-
 								if(expcount<step){
 									isAutoApproach=1;
 								}

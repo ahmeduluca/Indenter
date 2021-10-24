@@ -118,6 +118,7 @@ char BUFSM[2];
 char BUFSS[2];
 char appBuf[7]={0};
 long thresholdApp=0;
+long thresholdOff=0;
 long speedApp=0;
 int pcDecision=0;
 int onlyAct=0;
@@ -815,6 +816,7 @@ void ProcessData(char incom[],int iD)
 				}
 				memcpy(&appBuf,&incom[8],6);
 				thresholdApp=atoi(appBuf);
+				thresholdOff=thresholdApp;
 				if(thresholdApp==0){
 					thresholdApp=contact;
 				}

@@ -440,7 +440,7 @@ void slopExt(int type, int xinter, int yinter, int threshold, int pull, int zinc
 		app=1;
 		for(int i=0;i<3;i++){
 			for(int j=0;j<3;j++){
-				while(instant.scalelive<threshold&&emergency==0){
+				while(loadnow<threshold&&emergency==0){
 					voltnow-=zinc;
 					ftos(voltnow,voltage);
 					motsender[0]=0;
@@ -452,14 +452,15 @@ void slopExt(int type, int xinter, int yinter, int threshold, int pull, int zinc
 					strcat(motsender,datasender);
 					SendPc(motsender, 5, 2);
 					GiveVolt(voltage);
-					DWT_Delay(100000);
+					DWT_Delay(200000);
 					if(voltnow-zinc<-1000000){
 						SendPc("OUTRANG", 5, 0);
 						break;
 					}
 				}
 				touchpt[cnt]=voltnow;
-				while(first+pull!=voltnow&&emergency==0){
+				SendPc("TOUCH", 5, 0);// allow PC to keep the point (x,y,z) info
+				while(pull>voltnow+zinc&&emergency==0){
 					voltnow+=zinc;
 					ftos(voltnow,voltage);
 					motsender[0]=0;
@@ -472,10 +473,6 @@ void slopExt(int type, int xinter, int yinter, int threshold, int pull, int zinc
 					SendPc(motsender, 5, 2);
 					GiveVolt(voltage);
 					DWT_Delay(100000);
-					if(voltnow+zinc>7500000){
-						SendPc("OUTRANG", 5, 2);
-						break;
-					}
 				}
 				if(emergency==0){
 					moveXY(0, 0, xinter,1);
@@ -490,6 +487,10 @@ void slopExt(int type, int xinter, int yinter, int threshold, int pull, int zinc
 		if(emergency==0){
 			moveXY(1, 1, yinter*3,1);
 		}
+		//after obtain 9 point height (touch point) info; with help of strain data determine slope
+		//for now, strain gage data is read through NI PCIe & PC so UI should handle after this point..
+		//to prepare algorithm here, using given voltage and piezo constant, an inner slope extraction will be tried.
+
 		app=0;
 	}
 	else if(type==1){//step motor
@@ -660,7 +661,7 @@ void autoApproach(int typ){
 	if(retracting==1 && typ!=3 && typ != -1 ){
 		TimeSet(&htim13, 200000);
 		if(app==0){
-			increment= expin[expcount].speed * 0.2;
+			increment= expin[expcount].speed * 0.2;//convert volt/sec to 200ms steps of actuator
 		}
 		if(expin[expcount].stepret!=0){
 			if(expLoad){
@@ -766,10 +767,12 @@ void Osc(long amp, long period, long dur, int type){
 			ftos(firstpt-amp*2,lovolt);
 			numosc=2*dur/period;
 		}
-		sqrmod = 10*(period-0.075*period);//for 500 us cycle of timer, change voltage for sqr wave at half period at each (period/2*0.5) th cycle
+		sqrmod = 10*(period-0.075*period);//for 50 us cycle of timer, change voltage for sqr wave at half period at each (period/(2*0.05)) th cycle
 		// there is a phase between giving voltage change order and application of voltage via UC45 about 50 ms.
 		// It should not change for any cycle bcs its communication time for UC45; care should be taken for not to give smaller period than 50 ms
-		TimeSet(&htim10, 50);//
+		//-0.075*period is set to achieve exact timing//there is a delay for application of voltage and order via USART
+		// 0.075 parameter is calibrated for ~3um/0.9V(*20) pp sqr wave case and will be later justified for all voltage range.
+		TimeSet(&htim10, 50);//50 us timer set for square wave oscillation
 	}
 	else if(type==2){
 		numosc=dur/period;
