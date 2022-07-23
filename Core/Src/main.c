@@ -259,6 +259,7 @@ int main(void)
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
   TimeSet(&htim13, 100000);
+  TimeSet(&htim12, 10000);
   /* USER CODE END 2 */
 
   /* Infinite loop */

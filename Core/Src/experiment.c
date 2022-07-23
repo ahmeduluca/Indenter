@@ -17,19 +17,16 @@ extern TIM_HandleTypeDef htim11;
 extern TIM_HandleTypeDef htim12;
 extern TIM_HandleTypeDef htim13;
 
-//extern UART_HandleTypeDef huart2;
-//extern uint8_t _TxBuf2[TXBUFSIZE2];
-//extern uint8_t _RxBuf2[RXBUFSIZE2];
 extern uint32_t Tx_Timer2;
 extern char writingpc [100];
 
 extern HX711 instant;
 
-INITIALCOM INIT0;
-EXPERIMENT expin[100];
-EXPERIMENTrx exprx[100];
-CALIBRATION calib;
-CALIBRATIONrx calibrx;
+extern INITIALCOM INIT0;
+extern EXPERIMENT expin[100];
+extern EXPERIMENTrx exprx[100];
+extern CALIBRATION calib;
+extern CALIBRATIONrx calibrx;
 enum approach app;
 
 
@@ -37,6 +34,8 @@ extern int contact;
 extern char datasender[30];
 extern int extcon;
 extern int loadcon;
+extern int stepfin;
+extern int infin;
 
 extern int uart2say;
 extern int repsay;
@@ -45,7 +44,7 @@ extern char writingpc [100];
 extern char adding [5];
 extern char * mesaj;
 extern char voltageval[11];
-
+extern char ucPreBuf[15];
 //genel sayac ve parametreler
 int initalize=0;//uc45 initialize array cont
 int contproc=0;//uc45 com start cont
@@ -148,6 +147,12 @@ int sampleChannel=0;
 extern int heatDuty[3];
 extern int heatFeed[3];
 extern long thresholdApp;
+
+char maxVolt[10]={'7','.','5','0','0','0','0','0', 0, 0};
+char minVolt[10]={'-','1','.','0','0','0','0','0','0', 0};
+long mxVolt=7500000;
+long mnVolt=-1000000;
+int loopUc45=0;
 
 void ftos(long a, char*s){
 	char buf1;
@@ -314,9 +319,9 @@ void ftos(long a, char*s){
 	}
 	s[i+7]=0;
 }
-void ParaInt(uint8_t * param){
+void ParaInt(uint8_t * param){//UC45 Parameters
 	int i =0;
-	if(param[0]=='W'){
+	if(param[0]=='W'){//Applied voltage(*20)
 		int j=1;
 		i=1;
 		while(param[i]!=0&&param[i]!='E'){
@@ -334,69 +339,99 @@ void ParaInt(uint8_t * param){
 		voltage[i-2]=0;
 		voltnow=atoi(voltage);
 	}
-	else if(param[0]=='P'){
+	else if(param[0]=='P'){//Proportional gain 0-10
 		while(param[i]!=0&&param[i]!='E'){
 			INIT0.kp[i]=param[i];
 			i++;
 		}
 	}
-	else if(param[0]=='I'){
+	else if(param[0]=='I'){//Integral gain
 		while(param[i]!=0&&param[i]!='E'){
 			INIT0.ki[i]=param[i];
 			i++;
 		}
 	}
-	else if(param[0]=='D'){
+	else if(param[0]=='D'){//Differential gain
 		while(param[i]!=0&&param[i]!='E'){
 			INIT0.kd[i]=param[i];
 			i++;
 		}
 	}
-	else if(param[0]=='C'){
+	else if(param[0]=='C'){//Filter Type
 		while(param[i]!=0&&param[i]!='E'){
 			INIT0.filtertype[i]=param[i];
 			i++;
 		}
 	}
-	else if(param[0]=='F'){
+	else if(param[0]=='F'){//Cutoff LP1
 		while(param[i]!=0&&param[i]!='E'){
 			INIT0.cutoff1[i]=param[i];
 			i++;
 		}
 	}
-	else if(param[0]=='S'){
+	else if(param[0]=='S'){//Cutoff LP2
 		while(param[i]!=0&&param[i]!='E'){
 			INIT0.cutoff2[i]=param[i];
 			i++;
 		}
 	}
-	else if(param[0]=='T'){
+	else if(param[0]=='T'){//Internal-External Drive
 		while(param[i]!=0&&param[i]!='E'){
 			INIT0.opmode[i]=param[i];
 			i++;
 		}
 	}
-	else if(param[0]=='M'){
+	else if(param[0]=='M'){//Maximum Applied Voltage
+		int j=1;
+		i=1;
 		while(param[i]!=0&&param[i]!='E'){
-			INIT0.vmax[i]=param[i];
+			INIT0.vmax[i-1]=param[i];
+			if(param[j]!='.'&&param[j]!='E'){
+				maxVolt[i-1]=param[j];
+			}
+			else if(param[j]=='.'){
+				j++;
+				maxVolt[i-1]=param[j];
+			}
+			j++;
 			i++;
 		}
+		maxVolt[i-2]=0;
+		mxVolt=atoi(maxVolt);
 	}
-	else if(param[0]=='N'){
+	else if(param[0]=='N'){//Minimumm Applied Voltage
+		int j=1;
+		i=1;
 		while(param[i]!=0&&param[i]!='E'){
-			INIT0.vmin[i]=param[i];
+			INIT0.vmin[i-1]=param[i];
+			if(param[j]!='.'&&param[j]!='E'){
+				minVolt[i-1]=param[j];
+			}
+			else if(param[j]=='.'){
+				j++;
+				minVolt[i-1]=param[j];
+			}
+			j++;
 			i++;
 		}
+		minVolt[i-2]=0;
+		mnVolt=atoi(minVolt);
 	}
-	else if(param[0]=='G'){
+	else if(param[0]=='G'){//DeltaS-Mass Addition to Actuator Parameter
 		while(param[i]!=0&&param[i]!='E'){
 			INIT0.deltaS[i]=param[i];
 			i++;
 		}
 	}
-	else if(param[0]=='B'){
+	else if(param[0]=='B'){//Open/Close Loop
 		while(param[i]!=0&&param[i]!='E'){
 			INIT0.clc[i]=param[i];
+			if(param[i]=='1'){
+				loopUc45=1;
+			}
+			else{
+				loopUc45=0;
+			}
 			i++;
 		}
 	}
@@ -441,6 +476,7 @@ void slopExt(int type, int xinter, int yinter, int threshold, int pull, int zinc
 		for(int i=0;i<3;i++){
 			for(int j=0;j<3;j++){
 				while(loadnow<threshold&&emergency==0){
+					uart2say=0;
 					voltnow-=zinc;
 					ftos(voltnow,voltage);
 					motsender[0]=0;
@@ -461,6 +497,7 @@ void slopExt(int type, int xinter, int yinter, int threshold, int pull, int zinc
 				touchpt[cnt]=voltnow;
 				SendPc("TOUCH", 5, 0);// allow PC to keep the point (x,y,z) info
 				while(pull>voltnow+zinc&&emergency==0){
+					uart2say=0;
 					voltnow+=zinc;
 					ftos(voltnow,voltage);
 					motsender[0]=0;
@@ -576,73 +613,80 @@ void slopExt(int type, int xinter, int yinter, int threshold, int pull, int zinc
 
 }
 void Indent(long depth, long speed, int yon){
-//her bir step için yapılacak dizi de açılabilir.
-	if (speed!=0&&motorcon==0){
-		stepno=depth/(speed*0.05);
-		returncheck=0;
-		if(yon==2){
-			firstdir=1;
+	if(depth>0){
+		if (speed!=0&&motorcon==0){
+			stepno=depth/(speed*0.05);
+			returncheck=0;
+			if(yon==2){
+				firstdir=1;
+			}
+			else{
+				firstdir=0;
+			}
+			if(expLoad==1){
+				firstpt=voltnow;
+				sendexp=0;
+				stepdepth=depth/stepno;
+				TimeSet(&htim13, 100000);
+				loadIndent=1;
+			}
+			else{
+				eqstep=1;
+				sendexp=0;
+				Cal(depth, stepno, 0);
+				//set heater during indent!
+			}
 		}
-		else{
-			firstdir=0;
-		}
-		if(expLoad==1){
-			firstpt=voltnow;
-			sendexp=0;
-			stepdepth=depth/stepno;
-			TimeSet(&htim13, 100000);
-			loadIndent=1;
-		}
-		else{
-			eqstep=1;
-			sendexp=0;
-			Cal(depth, stepno, 0);
-			//set heater during indent!
-		}
-	}
-	else if(motorcon==1){
-		HAL_TIM_Base_Stop_IT(&htim10);
-		uart2say=htim10.Instance->DMAR;
-		while(uart2say!=0){
-			uart2say=htim10.Instance->DMAR;
+		else if(motorcon==1){
 			HAL_TIM_Base_Stop_IT(&htim10);
+			uart2say=htim10.Instance->DMAR;
+			while(uart2say!=0){
+				uart2say=htim10.Instance->DMAR;
+				HAL_TIM_Base_Stop_IT(&htim10);
+			}
+			if(speed!=0){
+				TimeSet(&htim9, speed*500);
+			}
+			else{
+				TimeSet(&htim9, 200);
+			}
+			stepsay=depth;
+			//Setheater during indent
+			if(yon==1){
+				StepD(0);
+			}
+			else{
+				StepD(1);
+			}
 		}
-		if(speed!=0){
-			TimeSet(&htim9, speed*500);
+		else if(speed==0&&motorcon==0) {
+			//setHeater(sampleChannel, heatDuty[sampleChannel], 0);//set heater during indent
+			sendexp=1;
+			if(yon==2){
+				voltnow+=depth;
+			}
+			else{
+				voltnow-=depth;
+			}
+			uart2say=0;
+			ftos(voltnow,voltage);
+			motsender[0]=0;
+			strcat(motsender,voltage);
+			strcat(motsender,"E\0");
+			SendPc(motsender, 5, 0);
+			GiveVolt(voltage);
 		}
 		else{
-			TimeSet(&htim9, 200);
+			sendexp=1;
 		}
-		stepsay=depth;
-		//Setheater during indent
-		if(yon==1){
-			StepD(0);
-		}
-		else{
-			StepD(1);
-		}
-	}
-	else if(speed==0&&motorcon==0) {
-		setHeater(sampleChannel, heatDuty[sampleChannel], 0);//set heater during indent
-		sendexp=1;
-		if(yon==2){
-			voltnow+=depth;
-		}
-		else{
-			voltnow-=depth;
-		}
-		ftos(voltnow,voltage);
-		motsender[0]=0;
-		strcat(motsender,voltage);
-		strcat(motsender,"E\0");
-		SendPc(motsender, 5, 0);
-		GiveVolt(voltage);
 	}
 	else{
 		sendexp=1;
 	}
+
 }
 void Hold(long hold){
+	infin=0;
 	if(hold>50){
 		holder=hold/50;
 		TimeSet(&htim10, 50000);
@@ -709,14 +753,12 @@ void autoApproach(int typ){
 			if(app!=0||retracting==2){
 				SendPc("Retract_Complete\0", 5, 4);
 				uart2say=1;
-				TimeSet(&htim12, 100000);
 		    	appOrret=1;
 			}
 			else{
 				isAutoApproach=0;
 				SendPc("Retract_Complete\0", 5, 4);
 				uart2say=1;
-				TimeSet(&htim12, 100000);;
 			}
 		}
 		else if(expcount==0 && app!=0){//just for first step flow does not wait for REFIN message!
@@ -732,15 +774,14 @@ void autoApproach(int typ){
 		if(expcount!=0){
 			SendPc("Retract_Complete\0", 5, 4);
 			uart2say=1;
-			TimeSet(&htim12, 100000);
 		}
 	}
 	else{// after retract + xy movement send retract completed and wait for REFIN message
 		// its for lack of approach routine usage!
+		TimeSet(&htim13, 100000);
 		if(expcount!=0){
 			SendPc("Retract_Complete\0", 5, 4);
 			uart2say=1;
-			TimeSet(&htim12, 100000);
 		}
 		else{
 			isAutoApproach=0;
@@ -1011,22 +1052,27 @@ void Emergency(int type){
 		SendPc("ELECTRICAL PROTECTION", 5, 2);
 		GiveVolt("0.000000");
 		SendPc("0.000000E", 5, 2);
-		uart2say=htim9.Instance->DMAR;
-		while(uart2say!=0){
-			uart2say=htim9.Instance->DMAR;
+		setHeater(0, 0, 0);
+		setHeater(1, 0, 0);
+		setHeater(2, 0, 0);
+		while(htim9.Instance->DMAR!=0){
 			stopmot=1;
 			HAL_TIM_Base_Stop_IT(&htim9);
 		}
+		HAL_Delay(50);
+		ucPreBuf[0]='B';
+		ucPreBuf[1]=0;
+		mesaj="0\0";
+		SendAct(ucPreBuf, mesaj);
 	}
 	else{
-		HAL_GPIO_WritePin(TMC_EN_GPIO_Port,TMC_EN_Pin,GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(MS2_GPIO_Port, MS2_Pin,GPIO_PIN_RESET);
-		stepsay=1000;
-		TimeSet(&htim9, 200);
-		StepD(1);
 		SendPc("TIP&SURFACE PROTECTION", 5, 2);
 		GiveVolt("7.500000");
 		SendPc("7.500000E", 5, 2);
+		stepsay=1000;
+		speedmode=2;
+		TimeSet(&htim9, 200);
+		StepD(1);
 	}
 	emergency=0;
 	ProcessRx(3);

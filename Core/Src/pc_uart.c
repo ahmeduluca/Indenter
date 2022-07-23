@@ -80,6 +80,7 @@ extern int dir;
 extern int extcon;
 extern int firstdir;
 extern int initalize;
+extern int repsay;
 
 extern DHT_DataTypedef instanthum;
 extern HX711 instant;
@@ -108,6 +109,7 @@ extern int increment;
 extern int loadIndent;
 extern int holdcount;
 
+int autoland=0;
 uint32_t temptemp=0;
 int heatFeed[3]={0,0,0};
 int heatDuty[3]={0,0,0};
@@ -122,10 +124,12 @@ long thresholdOff=0;
 long speedApp=0;
 int pcDecision=0;
 int onlyAct=0;
-
+extern int loadproblem;
 //extern UARTCOM pcInit;
 //extern UARTCOM uc45Sender;
+int aprox=300;
 int stepfin=0;
+int infin=0;
 int readPc=0;
 int sendingPc=0;
 char ucBuffer[15];
@@ -147,30 +151,32 @@ UARTCOM pcInit={
 
 void PcRx(void){
 	_uartcom3->RxCounter++;
-	TimeSet(&htim12, 100000);
-	Rx_Timer3=0;
-	readPc=1;
 	if(contsend==1){
 		contsend=2;
 	}
 	if(_uartcom3->RxSize > _uartcom3->RxCounter)
 	{
-		_uartcom3->UResult^=Rx_Cplt;
+		readPc=1;
+		Rx_Timer3 = 0;
 		HAL_UART_Receive_IT(&huart3, &_uartcom3->RxBuf[_uartcom3->RxCounter], 1);
 		if(_uartcom3->RxBuf[_uartcom3->RxCounter]=='Q'&&_uartcom3->RxSize!=5){//Emergency control **sıfırlama
 			emergency=1;
 			Emergency(0);
 			uart2say=0;
+			readPc=0;
 		}
 		else if(_uartcom3->RxBuf[_uartcom3->RxCounter]=='*'&&_uartcom3->RxSize!=5){
 			emergency=2;
 			Emergency(1);
 			uart2say=0;
+			readPc=0;
 		}
 	}
 	else
 	{
 		readPc=0;
+		repsay=0;
+		uart2say=0;
 		_uartcom3->UResult|=Rx_Cplt;
 		Rx_Timer3 = 0;
 		_uartcom3->RxCounter = 0;
@@ -185,6 +191,7 @@ void PcRx(void){
 			uart2say=0;
 		}
 		else if(_uartcom3->RxBuf[0]=='Z'){
+			emergency=1;
 			movxy=0;
 			loadIndent=0;
 			HAL_GPIO_WritePin(L293DD_ENABLE1_GPIO_Port, L293DD_ENABLE1_Pin, GPIO_PIN_RESET);
@@ -206,17 +213,17 @@ void PcRx(void){
 			eqstepcounter=0;
 			givecount=0;
 			stepnum=1;
-			HAL_TIM_Base_Stop_IT(&htim11);
 			HAL_TIM_Base_Stop_IT(&htim10);
-			emergency=1;
+			uart2say=0;
 			if(htim9.Instance->DMAR==0){
 				SendPc("Stopped", 5, ID_FIND);
 			}
-			uart2say=0;
 			autoretract=0;
 			ProcessRx(3);
+			emergency=0;
 		}
 		else if(_uartcom3->RxBuf[0]=='R'&&_uartcom3->RxBuf[1]=='e'){
+			uart2say=0;
 			SendPc(writingpc,_uartcom3->RxSize, 0);
 		}
 		else if(_uartcom3->RxBuf[2]=='F'&&_uartcom3->RxBuf[3]=='I'&&_uartcom3->RxBuf[4]=='N'){
@@ -250,21 +257,20 @@ void PcRx(void){
 				stepfin=1;
 			}
 			else if(_uartcom3->RxBuf[0]=='I'&&_uartcom3->RxBuf[1]=='N'){
-				stepfin=1;
+				infin=1;
 			}
 			else{
 				HAL_TIM_Base_Start_IT(&htim10);
 			}
 		}
 		else if(_uartcom3->RxBuf[0]=='M'&&_uartcom3->RxBuf[4]=='D'){
+			uart2say=1;
 			motsender[0]=0;
 			itoa(motpos,motsender,10);
 			strcat(motsender,"PM\0");
 			SendPc(motsender, 5, ID_FIND);
-			uart2say=1;
-			TimeSet(&htim12, 100000);
 		}
-		else if(_uartcom3->RxBuf[0]=='V'){
+		else if(_uartcom3->RxBuf[0]=='V'&&_uartcom3->RxSize==5&&_uartcom3->ComId==2){
 			BUFGEN[0]=0;
 			BUFDEL[0] = 0;
 			BUFSM[0]=0;
@@ -277,6 +283,7 @@ void PcRx(void){
 			moveXY(atoi(BUFGEN), atoi(BUFDEL), atoi(BUFSM),atoi(BUFSS));
 		}
 		else if(_uartcom3->RxBuf[0]=='J'){
+			uart2say=0;
 			if(_uartcom3->RxBuf[2]=='E'){
 				joyen=1;
 				SendPc("Joystick Enabled!", 5, ID_FIND);
@@ -293,7 +300,6 @@ void PcRx(void){
 				strcat(datasender,"YGY\0");
 				SendPc(datasender, 5, ID_FIND);
 				uart2say=1;
-				TimeSet(&htim12,100000);
 			}
 			else{
 				datasender[0]=0;
@@ -301,7 +307,6 @@ void PcRx(void){
 				strcat(datasender,"ZGY\0");
 				SendPc(datasender, 5, ID_FIND);
 				uart2say=1;
-				TimeSet(&htim12,100000);
 			}
 		}
 		else if(_uartcom3->RxBuf[0]=='L'&&_uartcom3->RxBuf[1]=='P'){
@@ -317,6 +322,7 @@ void PcRx(void){
 			else{
 				pcDecision=0;
 			}
+			uart2say=0;
 			SendPc("Load Control via PC", 5, OLD_ID);
 		}
 		else if(_uartcom3->RxBuf[0]=='T'&&_uartcom3->RxSize==6){
@@ -336,6 +342,7 @@ void PcRx(void){
 			if(loadFeed==1){
 				contact=contact+strain; //extra conversion multiplication may be used
 			}
+			uart2say=0;
 			SendPc("Contact Point Saved", 5, OLD_ID);
 		}
 		else{
@@ -361,12 +368,16 @@ void PcTx(void){
 	}else{
 		_uartcom3->UResult|=Tx_Cplt;
 		Tx_Timer3 = 0;
+		Rx_Timer3 = 0;
 		_uartcom3->TxCounter = 0;
 	}
 }
 void DummyRead2(){
 	unsigned char dummyRead;
 	dummyRead= USART3->DR;
+	_uartcom3->RxBuf[0]=0;
+	memset(pcInit.RxBuf,0,sizeof(pcInit.RxBuf)/sizeof(pcInit.RxBuf[0]));
+	_uartcom3->UResult=0;
 	UNUSED(dummyRead);
 }
 void SendPc(char* mes, int rxsize, uint8_t comId){
@@ -394,8 +405,8 @@ void SendPc(char* mes, int rxsize, uint8_t comId){
 		pcInit.ResAck=0;
 		pcInit.UResult = 0;
 		pcInit.RxCounter=0;
-		_uartcom3=&pcInit;
 		DummyRead2();
+		_uartcom3=&pcInit;
 		HAL_UART_Transmit_IT(&huart3, _uartcom3->TxBuf, 1);
 		HAL_UART_Receive_IT(&huart3, _uartcom3->RxBuf, 1);
 	}
@@ -475,7 +486,6 @@ void ProcessRx(int type){
 		firstdir=0;
 		oscdown=0;
 		autoretract=0;
-		stepsay=0;
 	}
 }
 
@@ -487,12 +497,14 @@ void ProcessData(char incom[],int iD)
 	else{
 		contsend=0;
 	}
+	uart2say=0;
 	switch(iD)
 	{
 	case ID_UART_START:
 		if(incom[0]=='I'){
 			pccom=1;
 			extcon=0;
+			uart2say=1;
 			SendPc("OK\0",2, ID_UART_START);
 		}
 		else if(incom[0]=='O'&&incom[1]=='K'){
@@ -501,9 +513,11 @@ void ProcessData(char incom[],int iD)
 				initalize=0;
 				bossayac=1;
 			}
+			uart2say=0;
 			SendPc("CONNECTED\0", 5, ID_FIND);
 		}
 		else{
+			uart2say=0;
 			SendPc("TRY_AGAIN\0",1, ID_UART_START);
 			pccom=0;
 		}
@@ -520,7 +534,6 @@ void ProcessData(char incom[],int iD)
 				step=step+atoi(BUFGEN);//step sayısını al.
 				SendPc("R0\0",149, EXP_START);
 				uart2say=1;
-				TimeSet(&htim12, 100000);
 			}
 			else if(incom[1]=='1'){//4_1_App_return_dir_
 				memcpy(&BUFGEN,&incom[2],1);//APPROACH TYPE
@@ -531,7 +544,6 @@ void ProcessData(char incom[],int iD)
 				firstdir=atoi(BUFGEN);
 				SendPc("R1\0",41, EXP_START);
 				uart2say=1;
-				TimeSet(&htim12, 100000);
 			}
 			else if(incom[1]=='3'){
 				memcpy(&BUFGEN,&incom[2],1);//experiment displacement|2|/load|1|/voltage|0| control
@@ -540,6 +552,7 @@ void ProcessData(char incom[],int iD)
 				loadFeed=atoi(BUFGEN);
 				memcpy(&BUFGEN,&incom[4],1);//
 				SendPc("ExpType", 5, ID_FIND);
+				uart2say=1;
 			}
 		}
 		else if(incom[0]=='3'){
@@ -547,9 +560,11 @@ void ProcessData(char incom[],int iD)
 			dir=atoi(BUFGEN);
 			memcpy(&BUFGEN,&incom[2],1);
 			automot=atoi(BUFGEN);
+			autoland=automot;
 			memcpy(&BUFGEN,&incom[3],1);
 			speedmode=atoi(BUFGEN);
 			SendPc("R3\0", 20, MOT_COM);
+			uart2say=1;
 		}
 		else if(incom[0]=='5'){//5_SS_00
 			memcpy(&BUFGEN,&incom[1],1);
@@ -558,14 +573,15 @@ void ProcessData(char incom[],int iD)
 			bufsiz=bufsiz+atoi(BUFGEN);//DIR_COM BUFFER SIZE
 			SendPc("R5\0",bufsiz, DIRECT_COM);
 			uart2say=1;
-			TimeSet(&htim12, 100000);
 		}
 		else if(incom[0]=='6'&&_uartcom3->RxSize==5){
 			if(initalize>5){
 				tryuc=101;
-				char ucrest[15];
-				ucrest[0]='P';
-				SendAct(ucrest, INIT0.kp);
+				ucPreBuf[0]='T';
+				ucPreBuf[1]=0;
+				ucBuffer[0]='1';
+				ucBuffer[1]=0;
+				SendAct(ucPreBuf,ucBuffer);
 			}
 			else{
 				tryuc=0;
@@ -573,26 +589,26 @@ void ProcessData(char incom[],int iD)
 				initalize=0;
 				contproc=0;
 				HAL_TIM_Base_Start_IT(&htim11);
+				uart2say=0;
 				SendPc("Trying to Communicate UC45...\0", 5, ID_FIND);
 			}
 		}
 		else if(incom[0]=='7'){
 			memcpy(&BUFGEN,&incom[1],1);
-			control = 1000 * atoi(BUFGEN);
+			aprox = 1000 * atoi(BUFGEN);
 			memcpy(&BUFGEN,&incom[2],1);
-			control = control + 100 * atoi(BUFGEN);
+			aprox = aprox + 100 * atoi(BUFGEN);
 			memcpy(&BUFGEN,&incom[3],1);
-			control = control + 10 * atoi(BUFGEN);
+			aprox = aprox + 10 * atoi(BUFGEN);
 			memcpy(&BUFGEN,&incom[4],1);
-			control = control + atoi(BUFGEN);
+			aprox = aprox + atoi(BUFGEN);
 			motsender[0]=0;
 			itoa(adcVal1,motsender,10);
 			strcat(motsender,"C\0");
 			SendPc(motsender, 5, OLD_ID);
 			uart2say=1;
-			TimeSet(&htim12,100000);
 		}
-		else if(incom[0]=='8'){
+		else if(incom[0]=='8'){ //Load-cell/measurement/balance related Communication
 			if(incom[1]=='0'){//9pts deviaton find
 				if(incom[2]=='3'){//from NI-PCIe sensor data
 
@@ -617,7 +633,7 @@ void ProcessData(char incom[],int iD)
 				strcat(datasender,"XGY\0");
 				SendPc(datasender, 5, OLD_ID);
 				uart2say=1;
-				TimeSet(&htim12,100000);			}
+			}
 			else if(incom[1]=='2'){//mpu6050from moving part
 				HAL_GPIO_WritePin(MPU6050_AD0_GPIO_Port, MPU6050_AD0_Pin, GPIO_PIN_SET);
 				HAL_GPIO_WritePin(MPU6050_AD1_GPIO_Port, MPU6050_AD1_Pin, GPIO_PIN_RESET);
@@ -628,7 +644,6 @@ void ProcessData(char incom[],int iD)
 				strcat(datasender,"XGY\0");
 				SendPc(datasender, 5, OLD_ID);
 				uart2say=1;
-				TimeSet(&htim12,100000);
 			}
 			else if(incom[1]=='3'){//mpu6050from base part
 				HAL_GPIO_WritePin(MPU6050_AD0_GPIO_Port, MPU6050_AD0_Pin, GPIO_PIN_SET);
@@ -640,7 +655,6 @@ void ProcessData(char incom[],int iD)
 				strcat(datasender,"XGY\0");
 				SendPc(datasender, 5, OLD_ID);
 				uart2say=1;
-				TimeSet(&htim12,100000);
 			}
 			else if(incom[1]=='4'){//humidity sensor
 				//give instant data
@@ -655,10 +669,10 @@ void ProcessData(char incom[],int iD)
 				strcat(datasender,"T\0");
 				SendPc(datasender, 5, OLD_ID);
 				uart2say=1;
-				TimeSet(&htim12,100000);
 			}
 			else if(incom[1]=='5'){//hx711 read
 				//Continuous or instant
+				loadproblem=0;
 				isHXcom=1;
 				if(incom[2]=='0'){
 					instant=HX711_Value(instant,1);
@@ -668,11 +682,11 @@ void ProcessData(char incom[],int iD)
 					strcat(datasender,"LM\0");
 					strcat(motsender,datasender);
 					SendPc(motsender, 5, OLD_ID);
-					uart2say=1;
-					TimeSet(&htim12,100000);
 					isHXcom=0;
+					uart2say=1;
 				}
 				else if(incom[2]=='1'){
+					uart2say=0;
 					SendPc("TAMAMDIR", 5, OLD_ID);
 					isHXcom=0;
 					contsend=1; // continuum send live load data!
@@ -688,24 +702,27 @@ void ProcessData(char incom[],int iD)
 					strcat(motsender,datasender);
 					SendPc(motsender, 5, OLD_ID);
 					uart2say=1;
-					TimeSet(&htim12,100000);
 					contact=control+instant.scalelive;
 					isHXcom=0;
 				}
 				else if(incom[2]=='3'){
 					if(incom[3]=='1'){
+						uart2say=1;
 						loadcon=1; //HX711
 						SendPc("THRESHOLD", 6, OLD_ID);
 					}
 					else if(incom[3]=='2'){
+						uart2say=1;
 						loadcon=2; //MCU ADC strain measurement
 						SendPc("THRESHOLD", 6, OLD_ID);
 					}
 					else{
 						loadcon=0;
+						uart2say=0;
 						SendPc("TAMAMDIR", 5, OLD_ID);
 					}
 					isHXcom=0;
+					loadproblem=0;
 				}
 			}
 
@@ -713,6 +730,7 @@ void ProcessData(char incom[],int iD)
 		else if(incom[0]=='9'){//temperature set id
 			memcpy(&BUFGEN,&incom[1],1);
 			heaterid=atoi(BUFGEN);//set heater id..
+			uart2say=0;
 			if(incom[2]=='1'){
 				//take params and run heater
 
@@ -776,10 +794,10 @@ void ProcessData(char incom[],int iD)
 				contproc=0;
 				bossayac=1;
 			}
-			uart2say=1;
 			HAL_TIM_Base_Start_IT(&htim11);
 		}
 		else{
+			uart2say=1;
 			SendPc("NO_PROCESS\0",5, ID_FIND);
 		}
 		BUFGEN[0]=0;
@@ -808,7 +826,6 @@ void ProcessData(char incom[],int iD)
 				Cal(calib.depth, calib.nofstep, calib.interval);
 				SendPc("Executing_Calibration\0", 5, ID_FIND);
 				uart2say=1;
-				TimeSet(&htim12, 100000);
 			}
 			else{
 				if(incom[7]=='1'){
@@ -832,70 +849,97 @@ void ProcessData(char incom[],int iD)
 				}
 				if(app==none){
 					SendPc("Executing_Indentation\0", 5, EXP_START);
-					uart2say=1;
-					TimeSet(&htim12, 100000);
 				}
 				else{
 					SendPc("APPROACH\0", 5, EXP_START);
+				}
+				uart2say=1;
+			}
+
+		}
+		else if(incom[0]=='A'&&incom[1]=='w'&&incom[2]=='a'&&incom[3]=='i'&&incom[4]=='t'){
+			uart2say=0;
+			DummyRead2();
+			_uartcom3->RxSize=22;
+			HAL_UART_Receive_IT(&huart3, _RxBuf3, 1);
+		}
+		else if(_uartcom3->RxSize==149){
+			if(incom[0]=='O'||incom[0]=='I'){
+				pccom=0;
+				if(initalize<5){
+					initalize=0;
+					contproc=0;
+					bossayac=1;
+				}
+				HAL_TIM_Base_Start_IT(&htim11);
+			}
+			else{
+				memcpy(&exprx[S].stepIdrx,&incom[0],2);
+				if(atoi(exprx[S].stepIdrx)==S+1){
+					memcpy(&exprx[S].dirrx,&incom[3],1);
+					memcpy(&exprx[S].depthrx,&incom[4],9);
+					memcpy(&exprx[S].speedrx,&incom[15],9);
+					memcpy(&exprx[S].holdrx,&incom[26],9);
+					memcpy(&exprx[S].oscrx,&incom[37],1);
+					memcpy(&exprx[S].amprx,&incom[40],9);
+					memcpy(&exprx[S].freqrx,&incom[51],9);
+					memcpy(&exprx[S].durrx,&incom[62],9);
+					memcpy(&exprx[S].xpstrx,&incom[73],9);
+					memcpy(&exprx[S].ypstrx,&incom[84],9);
+					memcpy(&exprx[S].dtrx,&incom[95],5);
+					memcpy(&exprx[S].dtsrx,&incom[102],5);
+					memcpy(&exprx[S].dtamprx,&incom[109],5);
+					memcpy(&exprx[S].dtfreqrx,&incom[116],5);
+					memcpy(&exprx[S].dtphaserx,&incom[123],5);
+					memcpy(&exprx[S].dtwhenrx,&incom[130],1);
+					memcpy(&exprx[S].retrx,&incom[133],1);
+					memcpy(&exprx[S].removalHold,&incom[136],6);
+					memcpy(&exprx[S].removalPer,&incom[144],3);
+					S++;
+				}
+				if(S<step){
+					char stwrt[25];
+					itoa(S,stwrt,10);
+					strcat(stwrt,"._Step_Received\0");
+					SendPc(stwrt,149, EXP_START);
 					uart2say=1;
-					TimeSet(&htim12, 100000);
+				}
+				if(S==step){
+					char stwrt[30];
+					itoa(S,stwrt,10);
+					strcat(stwrt,"_StepReady\0");
+					SendPc(stwrt,22, EXP_START);
+					uart2say=2;
+					S=0;
+					expcount=0;
+					ProcessRx(1);
 				}
 			}
 
 		}
-		else if(_uartcom3->RxSize==149){
-			memcpy(&exprx[S].stepIdrx,&incom[0],2);
-			memcpy(&exprx[S].dirrx,&incom[3],1);
-			memcpy(&exprx[S].depthrx,&incom[4],9);
-			memcpy(&exprx[S].speedrx,&incom[15],9);
-			memcpy(&exprx[S].holdrx,&incom[26],9);
-			memcpy(&exprx[S].oscrx,&incom[37],1);
-			memcpy(&exprx[S].amprx,&incom[40],9);
-			memcpy(&exprx[S].freqrx,&incom[51],9);
-			memcpy(&exprx[S].durrx,&incom[62],9);
-			memcpy(&exprx[S].xpstrx,&incom[73],9);
-			memcpy(&exprx[S].ypstrx,&incom[84],9);
-			memcpy(&exprx[S].dtrx,&incom[95],5);
-			memcpy(&exprx[S].dtsrx,&incom[102],5);
-			memcpy(&exprx[S].dtamprx,&incom[109],5);
-			memcpy(&exprx[S].dtfreqrx,&incom[116],5);
-			memcpy(&exprx[S].dtphaserx,&incom[123],5);
-			memcpy(&exprx[S].dtwhenrx,&incom[130],1);
-			memcpy(&exprx[S].retrx,&incom[133],1);
-			memcpy(&exprx[S].removalHold,&incom[136],6);
-			memcpy(&exprx[S].removalPer,&incom[144],3);
-			S++;
-			if(S<step){
-				char stwrt[25];
-				itoa(S,stwrt,10);
-				strcat(stwrt,"._Step_Received\0");
-				SendPc(stwrt,149, EXP_START);//comid set important
+		else if(_uartcom3->RxSize==41){
+			if(incom[0]=='O'||incom[0]=='I'){
+				pccom=0;
+				if(initalize<5){
+					initalize=0;
+					contproc=0;
+					bossayac=1;
+				}
+				HAL_TIM_Base_Start_IT(&htim11);
+			}
+			else{
+				memcpy(&calibrx.depthrx,&incom[0],9);
+				memcpy(&calibrx.nofsteprx,&incom[11],9);
+				memcpy(&calibrx.intervalrx,&incom[22],9);
+				memcpy(&calibrx.hold,&incom[33],6);
+				eqstep=1;
+				ProcessRx(2);
+				SendPc("Start_to_Calibration?\0",8, EXP_START);
 				uart2say=1;
-				TimeSet(&htim12, 10000);				}
-			if(S==step){
-				char stwrt[30];
-				itoa(S,stwrt,10);
-				strcat(stwrt,"_StepReady\0");
-				SendPc(stwrt,22, EXP_START);
-				S=0;
-				expcount=0;
-				ProcessRx(1);
-				uart2say=1;
-				sendexp=1;
-				TimeSet(&htim12, 100000);
 			}
 		}
-		else if(_uartcom3->RxSize==41){
-			memcpy(&calibrx.depthrx,&incom[0],9);
-			memcpy(&calibrx.nofsteprx,&incom[11],9);
-			memcpy(&calibrx.intervalrx,&incom[22],9);
-			memcpy(&calibrx.hold,&incom[33],6);
-			eqstep=1;
-			ProcessRx(2);
-			SendPc("Start_to_Calibration?\0",8, EXP_START);
-			uart2say=0;
-		}
 		else if(incom[2]=='D'){
+			uart2say=0;
 			//take % incom[3]&incom[4]
 			memcpy(&BUFGEN,&incom[3],1);
 			heatDuty[heaterid] = 10 * atoi(BUFGEN);
@@ -905,7 +949,6 @@ void ProcessData(char incom[],int iD)
 			SendPc("HeaterDutySet", 5, ID_FIND);
 		}
 		else if(incom[0]=='S'&&incom[1]=='T'){
-			HAL_TIM_Base_Stop_IT(&htim12);
 			uart2say=0;
 			automot=0;
 			stopmot=0;
@@ -917,13 +960,26 @@ void ProcessData(char incom[],int iD)
 			else{
 				isAutoApproach=1;
 			}
+			sendexp=1;
 			TimeSet(&htim10, 100000);
 		}
+		else if(incom[0]=='O'||incom[0]=='I')
+		{
+			pccom=0;
+			if(initalize<5){
+				initalize=0;
+				contproc=0;
+				bossayac=1;
+			}
+			HAL_TIM_Base_Start_IT(&htim11);
+		}
 		else{
+			uart2say=1;
 			SendPc("NO_PROCESS",5, ID_FIND);
 		}
 		break;
 	case DIRECT_COM://direct com
+		uart2say=0;
 		if(incom[_uartcom3->RxSize-1]=='E'){
 			ucPreBuf[0]=0;
 			ucBuffer[0]=0;
@@ -931,26 +987,17 @@ void ProcessData(char incom[],int iD)
 			memcpy(&ucBuffer,&incom[1],_uartcom3->RxSize-2);
 			ucPreBuf[1]=0;
 			ucBuffer[_uartcom3->RxSize-2]=0;
-			SendAct(ucPreBuf, ucBuffer);
 			SendPc("Direct_Communication", 5, ID_FIND);
-			/*}
-			else{
-				if(retracting==0){
-					SendPc("Approaching", 5, ID_FIND);
-				}
-				else{
-					SendPc("Retracting", 5, ID_FIND);
-				}
-			}*/
+			SendAct(ucPreBuf, ucBuffer);
 			ParaInt(_uartcom1->TxBuf);
 		}
 		else{
+			uart2say=1;
 			SendPc("NO_PROCESS", 5, ID_FIND);
 		}
 		break;
 	case MOT_COM:
 		uart2say=0;
-		HAL_TIM_Base_Stop_IT(&htim12);
 		memcpy(&tmr,&incom[0],10);
 		TimeSet(&htim9, atoi(tmr)/2);
 		stepsay=1;
@@ -962,6 +1009,7 @@ void ProcessData(char incom[],int iD)
 		StepD(dir);
 		break;
 	case TEMP_SET://first 6 is Tset -123.456 C- after 2 digit empty- then 12 digit parameter (empty for now)
+		uart2say=0;
 		SendPc("Heater Activated!", 5, ID_FIND);
 		if(incom[0]=='-')
 		{
@@ -991,6 +1039,7 @@ void ProcessData(char incom[],int iD)
 		break;
 
 	default:
+		uart2say=0;
 		SendPc("NO_PROCESS", 5 ,ID_FIND);
 		break;
 	}

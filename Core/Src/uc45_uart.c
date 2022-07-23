@@ -24,6 +24,8 @@ extern int pccom;
 extern int initalize;
 extern int tryuc;
 extern uint32_t Tx_Timer1;
+extern int uart2say;
+extern int sendingPc;
 
 UARTCOM * _uartcom1;
 UARTCOM uc45Init={
@@ -54,7 +56,7 @@ void Uc45Rx(void){
 			{
 				HAL_UART_Receive_IT(&huart1, &_uartcom1->RxBuf[_uartcom1->RxCounter], 1);
 			}else{
-
+				uart2say=0;
 				_uartcom1->UResult|=Rx_Cplt;
 				//Rx_Timer1 = 0;
 				_uartcom1->RxCounter = 0;
@@ -70,9 +72,11 @@ void Uc45Rx(void){
 						_uartcom1->ResAck=0;
 						initalize=0;
 						if(pccom==1&&tryuc%2==0){
-							SendPc("Restart UC45",5,2);
-							HAL_TIM_Base_Stop_IT(&htim11);
-							tryuc++;
+							if(sendingPc==0){
+								SendPc("Restart UC45",5,2);
+								HAL_TIM_Base_Stop_IT(&htim11);
+								tryuc++;
+							}
 						}
 					}
 				}
@@ -123,12 +127,12 @@ void Uc45Tx(void){
 		_uartcom1->UResult|=Tx_Cplt;
 		Tx_Timer1 = 0;
 		_uartcom1->TxCounter = 0;
-		TimeSet(&htim12, 10000);
 	}
 }
 void DummyRead1(){
 	unsigned char dummyRead;
 	dummyRead= USART1->DR;
+	memset(_RxBuf1,0,sizeof(_RxBuf1)/sizeof(_RxBuf1[0]));
 	UNUSED(dummyRead);
 }
 void SendAct(char *pre,char *mess){
@@ -149,8 +153,8 @@ void SendAct(char *pre,char *mess){
 	uc45Sender.RxSize=1;
 	uc45Sender.ResAck=0;
 	uc45Sender.UResult=0;
-	_uartcom1=&uc45Sender;
 	DummyRead1();
+	_uartcom1=&uc45Sender;
 	HAL_UART_Transmit_IT(&huart1, _uartcom1->TxBuf,1);
 	HAL_UART_Receive_IT(&huart1, _uartcom1->RxBuf, 1);
 }

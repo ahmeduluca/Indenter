@@ -19,6 +19,7 @@ extern int ymov;
 extern int xmov;
 extern char motsender [100];
 extern char BUFSS [2];
+extern int uart2say;
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
@@ -65,7 +66,7 @@ void JoyBut1(void){
 			}
 		}
 		else{
-			joyen=1;//normalde 1 olacak
+			joyen=1;
 			extcon=1;
 		}
 	}
@@ -77,6 +78,7 @@ void JoyBut1(void){
 			}
 			motsender[0]=0;
 			BUFSS[0]=0;
+			uart2say=0;
 			itoa(speedmode,BUFSS,10);
 			strcat(motsender,"MSP\0");
 			strcat(motsender,BUFSS);
@@ -86,37 +88,24 @@ void JoyBut1(void){
 }
 void JoyBut2(void){
 	if(pccom!=1){
-		if(pccom!=1&&joyen==1){
+		if(joyen==1){
 			joyen=0;
 			extcon=0;
 		}
 		else{
-			joyen=0;//normalde 1
-			extcon=0;
+			joyen=1;
+			extcon=1;
 		}
 	}
 }
 void EndXplus(void){
+	uart2say=0;
 	if(HAL_GPIO_ReadPin(ESX_P_GPIO_Port, ESX_P_Pin)){
 		HAL_GPIO_WritePin(L293DD_ENABLE2_GPIO_Port, L293DD_ENABLE2_Pin, GPIO_PIN_RESET);
 		HAL_GPIO_WritePin(YN_GPIO_Port, YN_Pin, GPIO_PIN_RESET);
 		HAL_GPIO_WritePin(YP_GPIO_Port, YP_Pin, GPIO_PIN_RESET);
 		xsteps=0;
 		xmov=0;
-		SendPc("OutXP", 5, 0);
-	}
-	else{
-		SendPc("InXP", 5, 0);
-	}
-
-}
-void EndYplus(void){
-	if(HAL_GPIO_ReadPin(ESY_P_GPIO_Port, ESY_P_Pin)){
-		HAL_GPIO_WritePin(L293DD_ENABLE1_GPIO_Port, L293DD_ENABLE1_Pin, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(XN_GPIO_Port, XN_Pin, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(XP_GPIO_Port, XP_Pin, GPIO_PIN_RESET);
-		ysteps=0;
-		ymov=0;
 		SendPc("OutYP", 5, 0);
 	}
 	else{
@@ -124,7 +113,23 @@ void EndYplus(void){
 	}
 
 }
+void EndYplus(void){
+	uart2say=0;
+	if(HAL_GPIO_ReadPin(ESY_P_GPIO_Port, ESY_P_Pin)){
+		HAL_GPIO_WritePin(L293DD_ENABLE1_GPIO_Port, L293DD_ENABLE1_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(XN_GPIO_Port, XN_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(XP_GPIO_Port, XP_Pin, GPIO_PIN_RESET);
+		ysteps=0;
+		ymov=0;
+		SendPc("OutXP", 5, 0);
+	}
+	else{
+		SendPc("InXP", 5, 0);
+	}
+
+}
 void EndXmin(void){
+	uart2say=0;
 	if(HAL_GPIO_ReadPin(ESY_P_GPIO_Port, ESY_P_Pin)){
 		HAL_GPIO_WritePin(L293DD_ENABLE2_GPIO_Port, L293DD_ENABLE2_Pin, GPIO_PIN_RESET);
 		HAL_GPIO_WritePin(YN_GPIO_Port, YN_Pin, GPIO_PIN_RESET);
@@ -132,24 +137,25 @@ void EndXmin(void){
 		xsteps=0;
 		ysteps=0;
 		xmov=0;
-		SendPc("OutXM", 5, 0);
+		SendPc("OutYM", 5, 0);
 	}
 	else{
-		SendPc("InXM", 5, 0);
+		SendPc("InYM", 5, 0);
 	}
 
 }
 void EndYmin(void){
+	uart2say=0;
 	if(HAL_GPIO_ReadPin(ESY_P_GPIO_Port, ESY_P_Pin)){
 		HAL_GPIO_WritePin(L293DD_ENABLE1_GPIO_Port, L293DD_ENABLE1_Pin, GPIO_PIN_RESET);
 		HAL_GPIO_WritePin(XN_GPIO_Port, XN_Pin, GPIO_PIN_RESET);
 		HAL_GPIO_WritePin(XP_GPIO_Port, XP_Pin, GPIO_PIN_RESET);
 		ysteps=0;
 		ymov=0;
-		SendPc("OutYM", 5, 0);
+		SendPc("OutXM", 5, 0);
 	}
 	else{
-		SendPc("InYM", 5, 0);
+		SendPc("InXM", 5, 0);
 	}
 
 }

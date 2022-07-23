@@ -14,6 +14,6 @@
 
 
 void SendAct(char *pre,char *mess);
-void DummyRead2();
+void DummyRead1();
 
 #endif /* INC_UC45_UART_H_ */

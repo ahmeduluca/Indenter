@@ -29,7 +29,7 @@
 
 
 void SendPc(char* mes, int rxsize, uint8_t comId);
-void DummyRead1(void);
+void DummyRead2(void);
 void ProcessData(char incom[],int iD);
 void ProcessRx(int type);
 

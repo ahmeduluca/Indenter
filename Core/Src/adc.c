@@ -18,6 +18,7 @@ extern int joyint2;
 extern int control;
 extern int endstop;
 extern int stopmot;
+extern int aprox;
 extern TIM_HandleTypeDef htim9;
 extern TIM_HandleTypeDef htim10;
 extern TIM_HandleTypeDef htim11;
@@ -25,6 +26,7 @@ extern TIM_HandleTypeDef htim12;
 extern TIM_HandleTypeDef htim1;
 extern int heatDuty[3];
 extern int isHXcom;
+extern int uart2say;
 uint8_t convEnd = 0;
 int adctim;
 int adcVal2=0;
@@ -38,6 +40,7 @@ extern int xsteps;
 extern int ysteps;
 extern int loadnow;
 extern int loadFeed;
+extern int extcon;
 /**
  * @brief  Conversion complete callback in non blocking mode
  * @param  hadc: ADC handle
@@ -70,15 +73,15 @@ void actadc(uint16_t* adcarray){
 	int ycon=adcData[6];
 	int xcon=adcData[5];
 	adcsay=1;
-	if(adcVal1<1000&&adcVal2==0){
-		//HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_ALL);
+	if(adcVal1<aprox){
 		adcVal2=1;
-	}
-	if(loadcon==0){
-		if(control>=adcVal1){
+		if(loadcon==0){
 			sensdist=0;
 		}
-		else{
+	}
+	else{
+		adcVal2=0;
+		if(loadcon==0){
 			sensdist=1;
 		}
 	}
@@ -86,14 +89,16 @@ void actadc(uint16_t* adcarray){
 		if(zcon<1850){
 			if(joyint1==0){
 				automot=1;
+				extcon=1;
 				TimeSet(&htim9, 10000);
 				StepD(0);
 				joyint1=1;
 			}
 		}
-		else if(zcon>2300&&endstop==1){
+		else if(zcon>2300){
 			if(joyint1==0){
 				automot=1;
+				extcon=1;
 				TimeSet(&htim9, 10000);
 				StepD(1);
 				joyint1=2;
@@ -103,43 +108,43 @@ void actadc(uint16_t* adcarray){
 			joyint1=0;
 			stopmot=1;
 		}
-		if(xcon<1850){
+		if(ycon<1850){
 			if(joyint2 %2== 0){
 				if(joyint2<2){
-					moveXY(0, 0, 10000,5);
-					isHXcom=1;
-				}
-			}
-		}
-		else if(xcon>2300){
-			if(joyint2 %3== 0){
-				if(joyint2<3){
-					moveXY(0, 1, 10000,5);
-					isHXcom=1;
-				}
-			}
-		}
-		else {
-			xsteps=0;
-		}
-		if(ycon<1850){
-			if(joyint2 < 12){
-				if(joyint2<6){
-					moveXY(1, 1, 5,3);
+					moveXY(0, 0, 1000,1);
 					isHXcom=1;
 				}
 			}
 		}
 		else if(ycon>2300){
+			if(joyint2 %3== 0){
+				if(joyint2<3){
+					moveXY(0, 1, 1000,1);
+					isHXcom=1;
+				}
+			}
+		}
+		else {
+			ysteps=0;
+		}
+		if(xcon<1850){
+			if(joyint2 < 12){
+				if(joyint2<6){
+					moveXY(1, 0, 3000,1);
+					isHXcom=1;
+				}
+			}
+		}
+		else if(xcon>2300){
 			if(joyint2 > 9 ||joyint2<6){
 				if(joyint2<12){
-					moveXY(1, 0, 5,3);
+					moveXY(1, 1, 3000,1);
 					isHXcom=1;
 				}
 			}
 		}
 		else{
-			ysteps=0;
+			xsteps=0;
 		}
 	}
 	for (int i=0;i<3;i++){

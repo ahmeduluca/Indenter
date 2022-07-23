@@ -90,7 +90,7 @@ extern int yco;
 extern int movxy;
 extern int xmov;
 extern int ymov;
-
+extern int autoland;
 //motor params
 extern char tmr[10];
 extern char stepper[12];
@@ -167,9 +167,14 @@ int calHoldCount=0;
 int initialMotor=0;
 int approaching=0;
 int oscsqrCount=0;
+int loadproblem=0;
+
 extern int sqrmod;
 extern int dxy;
 extern int stepfin;
+extern int infin;
+extern long mnVolt;
+extern long mxVolt;
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 	if (htim->Instance == TIM9) {
@@ -212,15 +217,39 @@ void Timer9(void){
 			HAL_TIM_Base_Stop_IT(&htim9);
 			extcon=0;
 			automot=0;
+			sayacmot=0;
+
 		}
 		else{
 			HAL_GPIO_TogglePin(STEP_GPIO_Port, STEP_Pin);
 			if(HAL_GPIO_ReadPin(STEP_GPIO_Port, STEP_Pin)==1){
 				if(dir==0){
 					motpos+=motgain;
+					if(sayacmot %posinf==0){
+						uart2say=0;
+						datasender[0]=0;
+						motsender[0]=0;
+						itoa(posinf,motsender,10);
+						strcat(motsender,"PM\0");
+						itoa(loadnow,datasender,10);
+						strcat(datasender,"LM\0");
+						strcat(motsender,datasender);
+						SendPc(motsender, 5, 0);
+					}
 				}
 				else{
 					motpos-=motgain;
+					if(sayacmot %posinf==0){
+						uart2say=0;
+						motsender[0]=0;
+						datasender[0]=0;
+						itoa(-posinf,motsender,10);
+						strcat(motsender,"PM\0");
+						itoa(loadnow,datasender,10);
+						strcat(datasender,"LM\0");
+						strcat(motsender,datasender);
+						SendPc(motsender, 5, 0);
+					}
 				}
 			}
 		}
@@ -228,6 +257,7 @@ void Timer9(void){
 	else{
 		if(sqrdur==1)
 		{
+			uart2say=0;
 			datasender[0]=0;
 			itoa(loadnow,datasender,10);
 			strcat(datasender,"LM\0");
@@ -241,6 +271,7 @@ void Timer9(void){
 			HAL_TIM_Base_Start_IT(&htim9);
 		}
 		else if(sqrdur==2){
+			uart2say=0;
 			datasender[0]=0;
 			itoa(loadnow,datasender,10);
 			strcat(datasender,"LM\0");
@@ -251,6 +282,7 @@ void Timer9(void){
 			HAL_TIM_Base_Start_IT(&htim9);
 		}
 		else if(sqrdur==3){
+			uart2say=0;
 			datasender[0]=0;
 			itoa(loadnow,datasender,10);
 			strcat(datasender,"LM\0");
@@ -282,18 +314,19 @@ void Timer9(void){
 					SendPc("UPMOT\0", 5, 2);
 					motpos=0;
 					uart2say=1;
-					TimeSet(&htim12, 100000);
+					contsend=1;
 				}
 				else if(sensdist==0&&app==none){
 					motsender[0]=0;
-					itoa(sayacmot,motsender,10);
+					itoa(motpos,motsender,10);
 					strcat(motsender,"CLOSe\0");
 					SendPc(motsender, 5, 2);
 					uart2say=1;
-					TimeSet(&htim12, 100000);
+					contsend=1;
 				}
 				else if(app==none){
 					_uartcom3->ComId=2;
+					uart2say=0;
 					if(dir==0){
 						motsender[0]=0;
 						itoa(sayacmot,motsender,10);
@@ -307,8 +340,6 @@ void Timer9(void){
 						strcat(motsender,"PM\0");
 						SendPc(motsender, 5, 0);
 					}
-					uart2say=1;
-					TimeSet(&htim12, 100000);
 				}
 				sayacmot=0;
 			}
@@ -325,7 +356,7 @@ void Timer9(void){
 				}
 				if(sayacmot %posinf==0&&stopmot==0){
 					if(automot==1||(sendexp==1&&isAutoApproach==0)||eqstep==1||(expin[expcount].osc==osc_tri&&osc==1)){//automot in trial to change with aprroaching&retracting
-						//_uartcom3->ComId=2; //!maybe later
+						uart2say=0;
 						if(dir==0){
 							datasender[0]=0;
 							motsender[0]=0;
@@ -359,11 +390,11 @@ void Timer9(void){
 				if(approaching&&motorapp){
 					isAutoApproach=5;
 					SendPc("Approach_Complete\0", 5, 4);
-					uart2say=1;
-					TimeSet(&htim12, 100000);
+					uart2say=3;
 					approaching=0;
 				}
 				else if(!motorapp&&approaching){
+					uart2say=0;
 					motsender[0]=0;
 					itoa(sayacmot,motsender,10);
 					strcat(motsender,"PM\0");
@@ -387,6 +418,7 @@ void Timer9(void){
 			{
 				HAL_GPIO_WritePin(TMC_EN_GPIO_Port,TMC_EN_Pin,GPIO_PIN_SET);
 				HAL_TIM_Base_Stop_IT(&htim9);
+				uart2say=0;
 				if(dir==0){
 					motsender[0]=0;
 					itoa(sayacmot,motsender,10);
@@ -400,8 +432,6 @@ void Timer9(void){
 					strcat(motsender,"PM\0");
 					SendPc(motsender, 5, ID_FIND);
 				}
-				uart2say=1;
-				TimeSet(&htim12, 100000);
 				sayacmot=0;
 			}
 			else if(sendexp==0&&osc==1)
@@ -420,6 +450,7 @@ void Timer9(void){
 					TimeSet(&htim9,expin[expcount].freq/2);
 					HAL_TIM_Base_Start_IT(&htim9);
 					osccount++;
+					uart2say=0;
 					if(dir==0){
 						datasender[0]=0;
 						motsender[0]=0;
@@ -531,7 +562,7 @@ void Timer10(void){
 			if(expin[expcount].tramp!=0 && expin[expcount].ttime==0){//heat before indent
 				//feed internal =>set adc and temp sits..
 				//feed external take Temperature and set duty
-				setHeater(sampleChannel, heatDuty[sampleChannel], 0);
+				//setHeater(sampleChannel, heatDuty[sampleChannel], 0);
 				expin[expcount].tramp=0;
 			}
 			if(expcount==0){
@@ -545,13 +576,14 @@ void Timer10(void){
 			if(expin[expcount].ttime==2){//heat after indent
 				//feed internal =>set adc and temp sits..
 				//feed external take Temperature and set duty
-				setHeater(sampleChannel, heatDuty[sampleChannel], 0);
+				//setHeater(sampleChannel, heatDuty[sampleChannel], 0);
 			}
 			HAL_TIM_Base_Stop_IT(&htim10);
 			Hold(expin[expcount].hold);
 		}
 		else if(holdcount>1){
 			if(holdcount<=holder){
+				uart2say=0;
 				holdcount++;
 				motsender[0]=0;
 				datasender[0]=0;
@@ -559,29 +591,26 @@ void Timer10(void){
 				strcat(datasender,"LM\0");
 				strcat(motsender,datasender);
 				SendPc(motsender, 5, 0);
-				stepfin=0;
 			}
 			else{
-				if(stepfin==0){
+				if(infin==0){
 					readingpc[0]=0;
 					itoa(expcount+1,readingpc,10);
 					strcat(readingpc,"._Indent_Finished\0");
 					SendPc(readingpc, 5, 0);
-					uart2say=1;
-					TimeSet(&htim12, 100000);
+					uart2say=0;
 				}
 				else{
 					sendexp=1;
 					oscpass=1;
 					holdcount=0;
 					loadIndent=0;
+					infin=0;
 					stepfin=0;
 				}
 			}
 		}
 		else if(oscpass==1){
-			HAL_TIM_Base_Stop_IT(&htim12);
-			uart2say=0;
 			if(motorcon==1 && expin[expcount].osc!=osc_non){
 				stepsay=expin[expcount].amp;
 				numosc=expin[expcount].dur;
@@ -617,6 +646,7 @@ void Timer10(void){
 				itoa(expcount+1,readingpc,10);
 				strcat(readingpc,"._Oscillation_Finished\0");
 				SendPc(readingpc, 5, 0);
+				uart2say=0;
 			}
 			//autoretract for step ?if need-->x-y pst differ/or desired
 			else if(expcount+1<step && stepfin==1){
@@ -633,6 +663,7 @@ void Timer10(void){
 						autoApproach(2);
 						strcat(readingpc,"Retracting\0");
 						SendPc(readingpc, 5, 4);
+						uart2say=3;
 					}
 				}
 				expcount++;
@@ -645,22 +676,20 @@ void Timer10(void){
 				autoApproach(2);
 				expcount++;
 			}
-			else{
+			else if(stepfin==1){
 				stepfin=0;
+				infin=0;
 				oscpass=0;
 				expcount++;
 			}
-			uart2say=1;
-			TimeSet(&htim12, 100000);
 		}
 		else{
 			readingpc[0]=0;
 			sendexp=-1;
 			strcat(readingpc,"Experiment_Finished\0");
 			SendPc(readingpc, 5, 2);
+			uart2say=3;
 			ProcessRx(3);
-			uart2say=1;
-			TimeSet(&htim12, 100000);
 			HAL_TIM_Base_Stop_IT(&htim10);
 			expcount=-1;
 		}
@@ -676,6 +705,7 @@ void Timer10(void){
 			if(oscsqrCount%sqrmod==0){
 				if(osccount<numosc){
 					if(osccount%2==0){
+						uart2say=0;
 						strcat(datasender,hivolt);
 						strcat(datasender,"E\0");
 						strcat(motsender,datasender);
@@ -683,6 +713,7 @@ void Timer10(void){
 						GiveVolt(hivolt);
 					}
 					else if(osccount%2!=0){
+						uart2say=0;
 						strcat(datasender,lovolt);
 						strcat(datasender,"E\0");
 						strcat(motsender,datasender);
@@ -692,6 +723,7 @@ void Timer10(void){
 					osccount++;
 				}
 				else{
+					uart2say=0;
 					TimeSet(&htim10, 50000);
 					ftos(firstpt,voltage);
 					strcat(datasender,voltage);
@@ -707,16 +739,19 @@ void Timer10(void){
 				}
 			}
 			else if(oscsqrCount%2000==0){
+				uart2say=0;
 				SendPc(motsender, 5, 0);
 			}
 			oscsqrCount++;
 		}
 		else{//burada cal fonksiyonundan gelen veriler kullanılarak üçgen dalga veriliyor_100ms çözünürlükte maks step sayısı ile.
+			uart2say=0;
 			if(osccount<numosc){
 				if(eqstepcounter<2*stepnum){
 					if(oscdown==1){
 						if(eqstepcounter<stepnum){
 							if(givecount%2==0){
+								uart2say=0;
 								stepvolt=firstpt-stepdepth*(eqstepcounter+1);
 								voltnow=stepvolt;
 								ftos(stepvolt,voltage);
@@ -727,6 +762,7 @@ void Timer10(void){
 								SendPc(datasender, 5, 0);
 							}
 							else{
+								uart2say=0;
 								motsender[0]=0;
 								strcat(motsender,voltage);
 								strcat(motsender,"E\0");
@@ -738,6 +774,7 @@ void Timer10(void){
 						}
 						else if(eqstepcounter>=stepnum){
 							if(givecount%2==0){
+								uart2say=0;
 								stepvolt=stepvolt+stepdepth;
 								voltnow=stepvolt;
 								ftos(stepvolt,voltage);
@@ -748,6 +785,7 @@ void Timer10(void){
 								SendPc(datasender, 5, 0);
 							}
 							else{
+								uart2say=0;
 								motsender[0]=0;
 								strcat(motsender,voltage);
 								strcat(motsender,"E\0");
@@ -761,6 +799,7 @@ void Timer10(void){
 					else{
 						if(eqstepcounter<stepnum){
 							if(givecount%2==0){
+								uart2say=0;
 								stepvolt=firstpt+expin[expcount].amp-stepdepth*(eqstepcounter+1);
 								voltnow=stepvolt;
 								ftos(stepvolt,voltage);
@@ -771,6 +810,7 @@ void Timer10(void){
 								SendPc(datasender, 5, 0);
 							}
 							else{
+								uart2say=0;
 								motsender[0]=0;
 								strcat(motsender,voltage);
 								strcat(motsender,"E\0");
@@ -782,6 +822,7 @@ void Timer10(void){
 						}
 						else if(eqstepcounter>=stepnum){
 							if(givecount%2==0){
+								uart2say=0;
 								stepvolt=stepvolt+stepdepth;
 								voltnow=stepvolt;
 								ftos(stepvolt,voltage);
@@ -792,6 +833,7 @@ void Timer10(void){
 								SendPc(datasender, 5, 0);
 							}
 							else{
+								uart2say=0;
 								motsender[0]=0;
 								strcat(motsender,voltage);
 								strcat(motsender,"E\0");
@@ -811,6 +853,7 @@ void Timer10(void){
 				}
 			}
 			else{
+				uart2say=0;
 				osc=0;
 				osccount=0;
 				stepfin=0;
@@ -832,6 +875,7 @@ void Timer10(void){
 		if(eqstepcounter<2*stepnum){
 			if(eqstepcounter<stepnum){
 				if(givecount%2==0){
+					uart2say=0;
 					motsender[0]=0;
 					datasender[0]=0;
 					itoa(loadnow,datasender,10);
@@ -848,6 +892,7 @@ void Timer10(void){
 					ftos(stepvolt,voltage);
 				}
 				else{
+					uart2say=0;
 					motsender[0]=0;
 					strcat(motsender,voltage);
 					strcat(motsender,"E\0");
@@ -858,6 +903,7 @@ void Timer10(void){
 				givecount++;
 			}
 			else if(eqstepcounter==stepnum&&calib.holdDur!=0){
+				uart2say=0;
 				calHoldCount++;
 				motsender[0]=0;
 				datasender[0]=0;
@@ -865,7 +911,7 @@ void Timer10(void){
 				strcat(datasender,"LM\0");
 				strcat(motsender,datasender);
 				SendPc(motsender, 5, 0);
-				if(calHoldCount==calib.holdDur){
+				if(calHoldCount>calib.holdDur){
 					eqstepcounter++;
 					TimeSet(&htim10, caltime*1000);
 					if(returncheck==1){
@@ -880,8 +926,9 @@ void Timer10(void){
 					TimeSet(&htim10, 1000);
 				}
 			}
-			else if(eqstepcounter>=stepnum-1&&returncheck==1){
+			else if(eqstepcounter<2*stepnum&&returncheck==1){
 				if(givecount%2==0){
+					uart2say=0;
 					motsender[0]=0;
 					datasender[0]=0;
 					itoa(loadnow,datasender,10);
@@ -898,11 +945,12 @@ void Timer10(void){
 					voltnow=stepvolt;
 					ftos(stepvolt,voltage);
 					if(calib.holdDur!=0 && calHoldCount==2){
-						stepnum=stepnum+1;
+						stepnum++;
 						calHoldCount=0;
 					}
 				}
 				else{
+					uart2say=0;
 					motsender[0]=0;
 					strcat(motsender,voltage);
 					strcat(motsender,"E\0");
@@ -927,6 +975,7 @@ void Timer10(void){
 				TimeSet(&htim10, 100000);
 			}
 			else if(calib.holdDur!=0 && returncheck!=0){
+				uart2say=0;
 				calHoldCount++;
 				motsender[0]=0;
 				datasender[0]=0;
@@ -934,9 +983,10 @@ void Timer10(void){
 				strcat(datasender,"LM\0");
 				strcat(motsender,datasender);
 				SendPc(motsender, 5, 0);
-				if(calHoldCount==calib.holdDur){
+				if(calHoldCount>calib.holdDur){
 					calib.holdDur=0;
 					calHoldCount=0;
+					TimeSet(&htim10, 100000);
 				}
 				if(calHoldCount==1){
 					TimeSet(&htim10, 1000);
@@ -951,31 +1001,20 @@ void Timer10(void){
 				readingpc[0]=0;
 				strcat(readingpc,"Calibration_Finished\0");
 				SendPc(readingpc, 5, ID_FIND);
-				uart2say=1;
+				uart2say=3;
 				ProcessRx(3);
-				TimeSet(&htim12, 100000);
 			}
 		}
 	}
 	else{
-		HAL_TIM_Base_Stop_IT(&htim10);
 		uart2say=0;
+		HAL_TIM_Base_Stop_IT(&htim10);
 		SendPc("TAMAMDIR", 5, 0);
 	}
 
 }
 
 void Timer11(void){
-	//HAL_GPIO_TogglePin(Y_CCW_GPIO_Port, Y_CCW_Pin);
-	//stepsay++;
-	//if(stepsay/(bossayac*10+10)>5){
-	//	bossayac++;
-	//	stepsay=0;
-	//	TimeSet(&htim11, 1000000/bossayac);
-	//}
-	//if(bossayac==100000){
-	//	bossayac=0;
-	//}
 	if(pccom==0){
 		pcInit.RxSize=1;
 		pcInit.ComId=1;
@@ -1008,6 +1047,7 @@ void Timer11(void){
 			SendAct(adding, mesaj);
 			HAL_TIM_Base_Stop_IT(&htim11);
 			contproc=0;
+			uart2say=0;
 			SendPc("Connected_to_UC45_",5, ID_FIND);
 			initalize=6;
 		}
@@ -1017,22 +1057,23 @@ void Timer11(void){
 }
 
 void Timer12(void){
-	if (!(_uartcom1->UResult & Rx_Cplt)&&sendexp==-1&&eqstep==0&&tryuc%2==0)
+	if (!(_uartcom1->UResult & Rx_Cplt))//&&sendexp==-1&&eqstep==0&&tryuc%2==0
 	{
 		Rx_Timer1++;
 		if (100 <= Rx_Timer1)
 		{
 			_uartcom1->UResult |= Rx_Tout;
-			Rx_Timer1 = 0;
-			if(pccom==1&&tryuc%2==0)
+			if(pccom==1&&tryuc%2==0&&sendingPc==0)
 			{
+				Rx_Timer1 = 0;
 				pcInit.ComId=2;
+				uart2say=0;
 				SendPc("UC45_NOT_RESPONDING!", 5, ID_FIND);
 				HAL_TIM_Base_Start_IT(&htim11);
 				tryuc++;
+				initalize=0;
+				contproc=0;
 			}
-			initalize=0;
-			contproc=0;
 		}
 	}
 	else if((_uartcom1->UResult & Rx_Cplt)){
@@ -1048,18 +1089,48 @@ void Timer12(void){
 	//			Tx_Timer1 = 0;
 	//		}
 	//	}
-	if (!(_uartcom3->UResult & Rx_Cplt))
+	if (!(_uartcom3->UResult & Rx_Cplt)&&(readPc==1||uart2say>0))
 	{
 		Rx_Timer3++;
-		if (10 <= Rx_Timer3)
+		if (50 <= Rx_Timer3)
 		{
-			DummyRead2();
 			_uartcom3->UResult |= Rx_Tout;
-			if((sendexp!=-1||retracting==1)&&writingpc[0]!=0 && uart2say==1 && sendingPc==0 && readPc==0){
+			if(writingpc[0]!=0 && uart2say>0 && sendingPc==0 && readPc==0 && (repsay<5||uart2say==2)){
+				DummyRead2();
 				SendPc(writingpc, _uartcom3->RxSize, 0);
 				Rx_Timer3 = 0;
+				repsay++;
+			}
+			else if(writingpc[0]!=0 && sendingPc==0 && repsay<20 && readPc==0 &&uart2say==3){
+				DummyRead2();
+				SendPc(writingpc, _uartcom3->RxSize, 0);
+				Rx_Timer3 = 0;
+				repsay++;
+			}
+			else if(repsay<20 && sendingPc==0 &&(readPc==1||uart2say>0)){
+				Rx_Timer3 = 0;
+				readPc=0;
+				repsay++;
+				SendPc("ComErr", _uartcom3->RxSize, 0);
+			}
+			else if(sendingPc==0){//pccom->0
+				repsay=0;
+				Rx_Timer3=0;
+				uart2say=0;
+				readPc=0;
+				sendexp=-1;
+				stopmot=1;
+				movxy=0;
+				loadIndent=0;
+				HAL_GPIO_WritePin(L293DD_ENABLE1_GPIO_Port, L293DD_ENABLE1_Pin, GPIO_PIN_RESET);
+				HAL_GPIO_WritePin(L293DD_ENABLE2_GPIO_Port, L293DD_ENABLE1_Pin, GPIO_PIN_RESET);
+				ProcessRx(3);
+				SendPc("Stopped-ComErr", 1, 1);
 			}
 		}
+	}
+	else if(readPc==0 && uart2say==0){
+		Rx_Timer3=0;
 	}
 	//
 	//	if ((!(_uartcom3->UResult & Tx_Cplt)) && (!(_uartcom3->UResult & Tx_Tout)))
@@ -1080,6 +1151,7 @@ void Timer12(void){
 
 void Timer13(void){
 	if(movxy==1){
+		uart2say=0;
 		if(xmov==1){
 			HAL_GPIO_WritePin(L293DD_ENABLE1_GPIO_Port, L293DD_ENABLE1_Pin, GPIO_PIN_SET);
 			HAL_GPIO_WritePin(XN_GPIO_Port, XN_Pin, GPIO_PIN_RESET);
@@ -1095,6 +1167,9 @@ void Timer13(void){
 				xmov=0;
 				if(ymov==0){
 					movxy=0;
+					if(joyen==0){
+						TimeSet(&htim13, 100000);
+					}
 				}
 				xysend[0]=0;
 				itoa(x_enc[0],xysend,10);
@@ -1107,7 +1182,6 @@ void Timer13(void){
 					joyint2 = joyint2 - 6;
 				}
 				if(joyint2==0){
-					//TimeSet(&htim13, 100000);
 					isHXcom=0;
 					if(isAutoApproach==2){
 						autoApproach(3);
@@ -1140,6 +1214,9 @@ void Timer13(void){
 				xmov=0;
 				if(ymov==0){
 					movxy=0;
+					if(joyen==0){
+						TimeSet(&htim13, 100000);
+					}
 				}
 				xysend[0]=0;
 				itoa(x_enc[0],xysend,10);
@@ -1152,7 +1229,6 @@ void Timer13(void){
 					joyint2 = joyint2 - 6;
 				}
 				if(joyint2==0){
-					//TimeSet(&htim13, 100000);
 					isHXcom=0;
 					if(isAutoApproach==2){
 						encodMove=encodMove-1;
@@ -1186,6 +1262,9 @@ void Timer13(void){
 				ymov=0;
 				if(xmov==0){
 					movxy=0;
+					if(joyen==0){
+						TimeSet(&htim13, 100000);
+					}
 				}
 				xysend[0]=0;
 				itoa(y_enc[0],xysend,10);
@@ -1198,7 +1277,6 @@ void Timer13(void){
 					joyint2 = joyint2-3;
 				}
 				if(joyint2==0){
-					//TimeSet(&htim13, 100000);
 					isHXcom=0;
 					if(isAutoApproach==2){
 						encodMove=encodMove-2;
@@ -1231,6 +1309,9 @@ void Timer13(void){
 				ymov=0;
 				if(xmov==0){
 					movxy=0;
+					if(joyen==0){
+						TimeSet(&htim13, 100000);
+					}
 				}
 				ycount=0;
 				ysteps=0;
@@ -1245,7 +1326,6 @@ void Timer13(void){
 					joyint2 = joyint2-3;
 				}
 				if(joyint2==0){
-					//TimeSet(&htim13, 100000);
 					isHXcom=0;
 					if(isAutoApproach==2){
 						encodMove=encodMove-2;
@@ -1265,34 +1345,49 @@ void Timer13(void){
 		}
 	}
 
-	if(isHXcom==0){
+	if(isHXcom==0 && joyen==0){
 		if(HX711_Available()){
 			instant=HX711_Value(instant,1);
+			loadproblem=0;
+		}
+		else if(loadproblem!=-1&&movxy==0){
+			loadproblem+=1;
+			if(!isAutoApproach){
+				TimeSet(&htim13, 100000);
+			}
 		}
 		if(loadFeed==0){
 			loadnow=instant.scalelive;
+			if(loadproblem>10 && movxy==0){
+				loadproblem=-1;
+				uart2say=0;
+				SendPc("Load Problem", 5, OLD_ID);
+				TimeSet(&htim13, 100000);
+			}
 		}
 	}
 
 	if(approaching==1&&automot==1&&isAutoApproach==4){//!!automot cond control need
-		if(loadcon==1&&(loadnow>=contact||(app==2&&pcDecision==0))){
+		if(loadcon==1&&(loadproblem==-1||loadnow>=contact||(app==2&&pcDecision==0))){
 			automot=0;
 			stepsay=0;
 			stopmot=0;
 			motorTouchpt=motpos;
 		}
 	}
-	else if(automot==1&&dir==0&&approaching==0){
-		if(loadcon==1&&(loadnow>=contact||(app==2&&pcDecision==0))){
+	else if(automot==1&&dir==0&&autoland==1){
+		if(loadcon==1&&(loadproblem==-1||loadnow>=contact||(app==2&&pcDecision==0)))
+		{
 			sensdist=0;
 			motorTouchpt=motpos;
+			autoland=0;
 		}
 		else{
 			sensdist=1;
 		}
 	}
 	else if(retracting==1&&automot==1&&isAutoApproach==4){//!!automot cond control need
-		if(loadcon==1&&(loadnow<=contact||(app==2&&pcDecision==0))){
+		if(loadcon==1&&(loadproblem==-1||loadnow<=contact||(app==2&&pcDecision==0))){
 			automot=0;
 			stepsay=0;
 			stopmot=0;
@@ -1300,18 +1395,20 @@ void Timer13(void){
 	}
 	if(contsend==1&&sendingPc==0&&readPc==0&&automot==0){
 		datasender[0]=0;
+		uart2say=0;
 		itoa(loadnow,datasender,10);
 		strcat(datasender,"LM\0");
-		SendPc(datasender, 5, 2);
+		SendPc(datasender, 5, 0);
 	}
-	if(isAutoApproach==3)
+	if(isAutoApproach==3 && loadproblem!=-1)
 	{
 		if(app==1||app==2){
 			if(appOrret){
-				if(((loadnow<thresholdApp&&app==1)||(pcDecision==1&&app==2)) && (voltnow >= -1000000 && motorcon==0) && emergency==0){
+				if(((loadnow<thresholdApp&&app==1)||(pcDecision==1&&app==2)) && (voltnow >= mnVolt && motorcon==0) && emergency==0){
 					approaching=1;
 					if((onlyAct==0 && voltnow <= first-delta&&!dxy)||motorapp==1){
 						if(motorapp==0){//!(10um) move -->& scan > ~10um
+							uart2say=0;
 							voltnow=voltnow+delta;
 							ftos(voltnow,voltage);
 							motsender[0]=0;
@@ -1324,7 +1421,7 @@ void Timer13(void){
 							SendPc(motsender, 5, 4);
 							GiveVolt(voltage);
 							speedmode=5;//if tmc2209
-							stepsay=16;
+							stepsay=12;
 							automot=0;
 							TimeSet(&htim9, 10000);
 						}
@@ -1336,8 +1433,9 @@ void Timer13(void){
 						isAutoApproach=4;
 						StepD(0);
 					}
-					else if(((loadnow<thresholdApp&&app==1)||(pcDecision==1&&app==2)) && ((voltnow-increment < actTouchpt && dxy)||(voltnow-increment < -1000000 && !dxy)) ){
+					else if(((loadnow<thresholdApp&&app==1)||(pcDecision==1&&app==2)) && ((voltnow-increment < actTouchpt && dxy)||(voltnow-increment < mnVolt && !dxy)) ){
 						if(dxy==3){
+							uart2say=0;
 							voltnow=actTouchpt;
 							ftos(voltnow,voltage);
 							motsender[0]=0;
@@ -1353,6 +1451,7 @@ void Timer13(void){
 							first=voltnow;
 						}
 						else{
+							uart2say=0;
 							SendPc("OutRange", 5, 4);
 							ProcessRx(3);
 							HAL_TIM_Base_Stop_IT(&htim10);
@@ -1360,6 +1459,7 @@ void Timer13(void){
 						}
 					}
 					else if(motorapp!=1 && durummot==0){
+						uart2say=0;
 						voltnow=voltnow-increment;
 						ftos(voltnow,voltage);
 						motsender[0]=0;
@@ -1373,31 +1473,33 @@ void Timer13(void){
 						GiveVolt(voltage);
 					}
 				}
+				else if(emergency!=0){
+					app=0;
+					isAutoApproach=0;
+					approaching=0;
+				}
 				else if((loadnow < thresholdApp && app==1)){
 					isAutoApproach=0;
+					uart2say=0;
 					SendPc("Not_Approached\0", 5, 4);
-					uart2say=1;
 					sendexp=1;
-					TimeSet(&htim12, 100000);
 					approaching=0;
 				}
 				else if((emergency==0&&app==1)){
 					stopmot=1;
 					isAutoApproach=5;
 					SendPc("Approach_Complete\0", 5, 4);
-					uart2say=1;
+					uart2say=3;
 					sendexp=1;
-					TimeSet(&htim12, 100000);
 					actTouchpt=voltnow;
 					initialMotor=motpos;
 					approaching=0;
 					//Save actuator and motor psts for retract etc;
 				}
 				pcDecision=0;
-				emergency=0;
 			}
 			else{
-				if(dxy){
+				if(dxy && emergency==0){
 					if(motorapp){
 						speedmode=5;
 						stepsay=motpos-initialMotor;
@@ -1406,7 +1508,8 @@ void Timer13(void){
 						StepD(1);
 					}
 					else{
-						if((voltnow < actTouchpt+3*increment) && voltnow+increment<7500000){
+						if(loadnow>thresholdApp && voltnow+increment < mxVolt){
+							uart2say=0;
 							voltnow=voltnow+increment;
 							ftos(voltnow,voltage);
 							motsender[0]=0;
@@ -1421,8 +1524,25 @@ void Timer13(void){
 							}
 							GiveVolt(voltage);
 						}
-						else if(dxy&&voltnow >= actTouchpt+3*increment&&voltnow!=7500000){
-							voltnow=7500000;
+						else if((voltnow < actTouchpt+3*increment) && voltnow+increment<mxVolt){
+							uart2say=0;
+							voltnow=voltnow+increment;
+							ftos(voltnow,voltage);
+							motsender[0]=0;
+							datasender[0]=0;
+							itoa(loadnow,motsender,10);
+							strcat(motsender,"LM\0");
+							strcat(datasender,voltage);
+							strcat(datasender,"E\0");
+							strcat(motsender,datasender);
+							if(sendingPc==0){
+								SendPc(motsender, 5, 0);
+							}
+							GiveVolt(voltage);
+						}
+						else if(dxy&&voltnow >= actTouchpt+3*increment&&voltnow!=mxVolt){
+							uart2say=0;
+							voltnow=mxVolt;
 							ftos(voltnow,voltage);
 							motsender[0]=0;
 							datasender[0]=0;
@@ -1437,7 +1557,7 @@ void Timer13(void){
 							GiveVolt(voltage);
 						}
 						else{
-							if(dxy==2){
+							if(dxy==2 && expcount==step){//extra motor pull
 								speedmode=5;
 								stepsay=200;
 								automot=0;
@@ -1445,28 +1565,28 @@ void Timer13(void){
 								StepD(1);
 								dxy=4;
 							}
-							else if(dxy!=4){
+							else if(dxy!=4){ // finish of retract
 								dxy=3;
 								retracting=0;
-								thresholdApp = thresholdOff + loadnow;// there may be motor retract also for safe xy positioning-will be checked later-
+								thresholdApp = thresholdOff + loadnow;
 								if(expcount<step){
 									isAutoApproach=1;
 								}
 								else{//if its last step
 									isAutoApproach=5;
-									uart2say=1;
-									TimeSet(&htim12, 100000);
 									SendPc("Retract_Complete\0", 5, 4);
+									uart2say=3;
 								}
 							}
 						}
 					}
 				}
-				else if(emergency==0 && holdRet!=1 && (((loadnow > thresholdApp && app==1) || (pcDecision==2 && app==2)) && voltnow+increment < 7500000 && motorapp==0)){
+				else if(emergency==0 && holdRet!=1 && (((loadnow > thresholdApp && app==1) || (pcDecision==2 && app==2)) && voltnow+increment < mxVolt && motorapp==0)){
 					if(holdRet!=2 && ((loadnow<=holdPos&&app==1)||pcDecision==3)){//pcDecision for hold at retract state
 						holdRet=1;
 					}
 					else{
+						uart2say=0;
 						voltnow=voltnow+increment;
 						ftos(voltnow,voltage);
 						motsender[0]=0;
@@ -1482,14 +1602,14 @@ void Timer13(void){
 						GiveVolt(voltage);
 					}
 				}
-				else if(holdRet==1){
+				else if(holdRet==1 && emergency==0){
 					holdRetCnt++;
 					if(holdRetCnt>=holdRetDur){
 						holdRetCnt=0;
 						holdRet=2;
 					}
 				}
-				else if(emergency == 0 && (motorapp==1 || (voltnow+increment >= 7500000 && onlyAct==0 && ( (loadnow > thresholdApp && app==1) || (pcDecision==2&&app==2) ) ) )){
+				else if(emergency == 0 && (motorapp==1 || (voltnow+increment >= mxVolt && onlyAct==0 && ( (loadnow > thresholdApp && app==1) || (pcDecision==2&&app==2) ) ) )){
 					isAutoApproach=4;
 					automot=1;//burada sürekli çekiyoruz artık motorla ..
 					TimeSet(&htim9, 200000);
@@ -1499,28 +1619,30 @@ void Timer13(void){
 				}
 				else if((loadnow <= thresholdApp && app==1) && emergency == 0){//!!
 					retracting=2;
-					uart2say=1;
-					TimeSet(&htim12, 100000);
 					if(expcount<step){
 						isAutoApproach=1;
 					}
 					else{//if its last step
 						retracting=0;
 						isAutoApproach=5;
-						uart2say=1;
-						TimeSet(&htim12, 100000);
 						SendPc("Retract_Complete\0", 5, 4);
+						uart2say=3;
 					}
 				}
-				emergency=0;
+				else if(emergency!=0){
+					app=0;
+					isAutoApproach=0;
+					approaching=0;
+				}
 			}
 		}
 		else if(app==0){
-			if(!appOrret){
+			if(!appOrret && emergency==0){
 				//get to initial pst !motor con only motor step !not motor con only actuator step
 				if(motorcon==0){
 					retracting=1;
-					if(voltnow < initialPos + 5*increment && voltnow+increment < 7500000){
+					uart2say=0;
+					if(voltnow < initialPos + 5*increment && voltnow+increment < mxVolt){
 						voltnow=voltnow+increment;
 						ftos(voltnow,voltage);
 						motsender[0]=0;
@@ -1537,8 +1659,6 @@ void Timer13(void){
 					}
 					else{
 						thresholdApp = contact + loadnow;
-						uart2say=1;
-						TimeSet(&htim12, 100000);
 						retracting=0;
 						isAutoApproach=1;
 					}
@@ -1553,6 +1673,11 @@ void Timer13(void){
 					TimeSet(&htim9, 200000);
 					StepD(1);
 				}
+			}
+			else if(emergency!=0){
+				app=0;
+				isAutoApproach=0;
+				approaching=0;
 			}
 /*			else if(holdRet!=1){
 				//retract to (initial)+some threshold pst !before xy pst !depending on control -motor->1fullstep or actuator->7500000.
@@ -1579,7 +1704,6 @@ void Timer13(void){
 						retracting=0;
 						SendPc("Retract_Complete\0", 5, 4);
 						uart2say=1;
-						TimeSet(&htim12, 100000);
 						if(expcount+1<step){
 							isAutoApproach=1;
 						}
@@ -1621,6 +1745,7 @@ void Timer13(void){
 			}
 			else{
 				if(givecount%2==0){
+					uart2say=0;
 					if(holdcount<2){
 						motsender[0]=0;
 						datasender[0]=0;
@@ -1637,7 +1762,8 @@ void Timer13(void){
 				}
 				else{
 					motsender[0]=0;
-					if(voltnow<=-1000000){
+					uart2say=0;
+					if(voltnow<=mnVolt){
 						loadIndent=0;
 						SendPc("OutRange", 5, 4);
 					}
@@ -1668,6 +1794,7 @@ void Timer13(void){
 			}
 			else{
 				if(givecount%2==0){
+					uart2say=0;
 					if(holdcount<2){
 						motsender[0]=0;
 						datasender[0]=0;
@@ -1684,7 +1811,8 @@ void Timer13(void){
 				}
 				else{
 					motsender[0]=0;
-					if(voltnow>=7500000){
+					uart2say=0;
+					if(voltnow>=mxVolt){
 						loadIndent=0;
 						SendPc("OutRange", 5, 4);
 						TimeSet(&htim9, 100000);

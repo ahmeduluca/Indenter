@@ -51,10 +51,12 @@ int HX711_Average_Value(HX711 data, uint8_t times)
 HX711 HX711_Value(HX711 data, int av)
 {
     int buffer;
+    uint32_t prim;
     buffer=-1;
     if(HAL_GPIO_ReadPin(data.gpioData, data.pinData)!=1)
    {
-	   	//__disable_irq();
+    	prim = __get_PRIMASK();
+	   	__disable_irq();
 	   	buffer=0;
 		for (uint8_t i = 0; i < 24; i++)
 		{
@@ -75,7 +77,9 @@ HX711 HX711_Value(HX711 data, int av)
 			HAL_GPIO_WritePin(data.gpioSck, data.pinSck, GPIO_PIN_SET);
 			HAL_GPIO_WritePin(data.gpioSck, data.pinSck, GPIO_PIN_RESET);
 		}
-		//__enable_irq();
+		if(!prim){
+			__enable_irq();
+		}
 		buffer = buffer ^ 0x800000;
 		if(av){
 			data.scalelive=buffer-data.offset;

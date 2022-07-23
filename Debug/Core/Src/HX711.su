@@ -1,5 +1,5 @@
 HX711.c:10:6:HX711_Init	8	static
 HX711.c:31:5:HX711_Average_Value	72	static
-HX711.c:51:7:HX711_Value	40	static
-HX711.c:93:7:HX711_Tare	48	static
-HX711.c:100:5:HX711_Available	8	static
+HX711.c:51:7:HX711_Value	48	static,ignoring_inline_asm
+HX711.c:97:7:HX711_Tare	48	static
+HX711.c:104:5:HX711_Available	8	static
